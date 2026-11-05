@@ -72,6 +72,25 @@ for _, z in ipairs(f.rechts.zeilen) do
 end
 assert(gefunden or f.rechts.bereit.shown, "Stueckliste fehlt")
 
+-- Zutaten-Zeile: die Haendler-Zeile endet vor dem Knopf "Bestellen" (lief im Spiel darunter)
+d.vendors = { [2770] = { ["Golorn Frostbeard"] = { zone = "Dun Morogh", x = 46.8, y = 53, price = 2, stack = 1, faction = "Alliance", at = 1 } } }
+d.settings.wunsch = 1
+offnen()
+local geprueft = false
+for _, z in ipairs(f.rechts.zeilen) do
+    if z.benutzt and z.itemID == 2770 then
+        assert(z.bestellen.shown, "Knopf Bestellen fehlt")
+        assert(string.find(z.quelle.text, "Golorn", 1, true), "Haendler fehlt: " .. z.quelle.text)
+        local rechts
+        for _, p in ipairs(z.quelle.points) do
+            if p[1] == "RIGHT" then rechts = p end
+        end
+        assert(rechts and rechts[2] == z.bestellen and rechts[3] == "LEFT", "Zeile laeuft unter den Knopf")
+        geprueft = true
+    end
+end
+assert(geprueft, "Zutaten-Zeile nicht gefunden")
+
 -- Altes Wunschrezept von Hilda (Wunsch gilt fuer alle Charaktere): bleibt still, kein Hinweis
 d.settings.wunsch = 2
 offnen()

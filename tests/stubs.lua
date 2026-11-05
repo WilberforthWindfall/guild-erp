@@ -49,6 +49,8 @@ local function newObj(kind)
             if k == "GetStringHeight" then local _, n = string.gsub(self.text or "", "\n", "") return 12 * (n + 1) end
             if k == "GetStringWidth" then return #(self.text or "") * 6 end
             if k == "GetPoint" then return "CENTER", nil, "CENTER", 10, 20 end
+            if k == "SetPoint" then table.insert(self.points, args) return end
+            if k == "ClearAllPoints" then self.points = {} return end
             if k == "SetTexture" then self.texture = args[1] return end
             if k == "SetChecked" then self.checked = args[1] and true or false return end
             if k == "GetChecked" then return self.checked end

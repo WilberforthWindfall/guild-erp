@@ -1957,7 +1957,8 @@ local function ZeileZeigen(f, zeile, tiefe, schluessel, fraktion)
     end
     z.quelle:ClearAllPoints()
     z.quelle:SetPoint("TOPLEFT", unter, "BOTTOMLEFT", 0, -2)
-    z.quelle:SetPoint("RIGHT", z, "RIGHT", -6, 0)
+    -- wie der Name: vor dem Knopf bzw. der Mengenangabe enden, damit nichts darunter laeuft
+    z.quelle:SetPoint("RIGHT", z.bestellen:IsShown() and z.bestellen or z.zahl, "LEFT", -8, 0)
     z.quelle:SetText(quelle)
     z.quelle:SetShown(quelle ~= "")
     if quelle ~= "" then
