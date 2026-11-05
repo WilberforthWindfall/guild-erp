@@ -18,6 +18,7 @@ Dauerhafte Hinweise für Claude Code in diesem Repository. Ausführliche Überga
 ## Technik
 - Client: WoW Forever = Retail-Client (12.x-API, Mainline-UI, Midnight-Beschränkungen), Start 4.11.2026. Lua 5.1.
 - Alles steckt derzeit in **einer** Datei `GuildERP/GuildERP.lua` (~8.800 Zeilen). Wegen der Lua-Grenze von 200 lokalen Variablen pro Funktion/Hauptteil stehen Funktionen in Tabellen: `K` (Konstanten), `B` (Bestellungen/Abgleich), `P` (Planaufträge), `A` (Auktionshaus), `Kat` (Katalog), `O` (Optionen, Spiel-Look, Guild-Found). **Keine neuen lokalen Namen im Hauptteil**, sondern in diese Tabellen.
+- Neue Fenster mit `O.Rahmen(...)`, Zeitgeber mit `O.Nach(...)` statt `CreateFrame`/`C_Timer.After`, sonst fehlt der Fehlerschutz.
 - Bezeichner und Kommentare deutsch; Kommentare ohne Umlaute (ae/oe/ue), Texte für Spieler mit Umlauten (UTF-8).
 - Namen in WoW Forever: Vor- **und** Nachname; nur die Kombination ist eindeutig. `UnitName` liefert nur den Vornamen, der `CHAT_MSG_ADDON`-Absender den vollen Namen. Helfer: `B.Name`, `B.Vorname`, `B.Gleich`, `B.Ich`, `B.Anzeige`.
 - Gespeicherte Daten: `GuildERPData` (Aufbau in `docs/KONZEPT.md` → „Datenmodell“).

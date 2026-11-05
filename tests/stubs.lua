@@ -1,4 +1,6 @@
 -- Minimal-Attrappe der WoW-Schnittstelle fuer Tests (Lua 5.1)
+-- Tests: der Fehlerschutz des Add-ons reicht Fehler weiter, damit die Sims sie bemerken
+GERP_STRENG = true
 local timers = {}
 C_Timer = { After = function(t, fn) table.insert(timers, fn) end }
 function RunTimers()

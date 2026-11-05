@@ -40,7 +40,7 @@ Details, Regeln, Entscheidungen und Versionsgeschichte: `docs/KONZEPT.md`.
 5. **„[n]“** hinter Rezeptnamen (wie oft mit Taschen-Inhalt herstellbar), wie im Berufefenster.
 6. **Gildenabgleich bei vielen Online-Mitgliedern** prüfen (Nachrichtenmenge, Drosselung, evtl. Stand nur auf Nachfrage senden).
 7. **Texte** durchsehen (einheitlich, kurz, freundlich); evtl. Vorbereitung für Englisch (Entscheidung Nutzer).
-8. **Fehlerschutz**: alle Ereignis-Handler mit `pcall`, Fehler sammeln (`/gerp info`), keine Lua-Fehlerfenster bei den Gildenfreunden.
+8. **Fehlerschutz** (erledigt in 1.4): Ereignisse, Klicks, Zeitgeber und Befehle laufen über `O.Sicher`, neue Fenster über `O.Rahmen`, neue Zeitgeber über `O.Nach`; Fehler stehen in `/gerp info`. In den Tests reicht `GERP_STRENG` sie weiter. Fehler beim Laden der Datei selbst fängt das nicht ab.
 9. **Tests automatisieren**: `tests/run_all.sh` in GitHub Actions (Lua 5.1), dazu `luacheck` mit `.luacheckrc` (WoW-Globale). Veraltete Sims (sim7, sim11, sim12, sim10v) an die Testdaten anpassen oder entfernen.
 10. **Testdaten anonymisieren** (Charakternamen in `tests/fixtures/`), damit die Tests auch öffentlich laufen können – bis dahin bleiben sie in `.gitignore`.
 11. **Auslieferung**: GitHub-Release mit ZIP (`GuildERP/` als einziger Ordner); optional CurseForge/Wago über den BigWigs-Packager (`.pkgmeta`) – Entscheidung Nutzer.

@@ -103,6 +103,80 @@ local function Daten()
     return d
 end
 
+-- ---------------------------------------------------------------------------
+-- Fehlerschutz (ab 1.4): Ein Fehler in Guild ERP soll nie ein Fehlerfenster aufmachen. Alles, was
+-- das Spiel aufruft (Ereignisse, Klicks, Zeitgeber, Befehle), laeuft ueber O.Sicher. Fehler werden
+-- gesammelt (diagnostics.fehler, siehe /gerp info). Die Tests setzen GERP_STRENG, dann werden Fehler
+-- weitergereicht, damit sie dort auffallen.
+-- ---------------------------------------------------------------------------
+K.FEHLER_MAX = 20
+
+function O.Fehler(ort, text)
+    pcall(function()
+        local d = Daten()
+        text = string.sub(tostring(text), 1, 300)
+        d.diagnostics.fehler = d.diagnostics.fehler or {}
+        local liste = d.diagnostics.fehler
+        local eintrag
+        for _, e in ipairs(liste) do
+            if e.text == text and e.ort == ort then
+                eintrag = e
+            end
+        end
+        if not eintrag then
+            eintrag = { ort = ort, text = text, n = 0, version = K.VERSION }
+            table.insert(liste, eintrag)
+            if #liste > K.FEHLER_MAX then
+                table.remove(liste, 1)
+            end
+        end
+        eintrag.n = eintrag.n + 1
+        eintrag.at = time()
+        -- pro Sitzung nur einmal im Chat, das Spiel laeuft ja normal weiter
+        if not O.fehlerGemeldet then
+            O.fehlerGemeldet = true
+            Melden("Kleiner Fehler im Add-on, das Spiel läuft normal weiter. /gerp info zeigt Details.")
+        end
+    end)
+    if GERP_STRENG then
+        error(ort .. ": " .. tostring(text), 0)
+    end
+end
+
+function O.SicherErgebnis(ort, ok, ...)
+    if ok then
+        return ...
+    end
+    O.Fehler(ort, (...))
+end
+
+function O.Sicher(ort, fn, ...)
+    return O.SicherErgebnis(ort, pcall(fn, ...))
+end
+
+-- wie CreateFrame, aber alle Skripte des Fensters laufen ueber den Fehlerschutz
+function O.Rahmen(...)
+    local f = CreateFrame(...)
+    local setzen = f.SetScript
+    f.SetScript = function(self, art, fn)
+        if type(fn) == "function" then
+            local echt = fn
+            fn = function(...)
+                return O.Sicher(art, echt, ...)
+            end
+        end
+        return setzen(self, art, fn)
+    end
+    return f
+end
+
+-- wie C_Timer.After, aber mit Fehlerschutz
+function O.Nach(sekunden, fn)
+    C_Timer.After(sekunden, function()
+        O.Sicher("Zeitgeber", fn)
+    end)
+end
+
 local function CharakterSchluessel()
     local name = UnitName("player")
     local realm = GetRealmName and GetRealmName()
@@ -579,7 +653,7 @@ local function RezepteLesen()
     d.diagnostics.letzterBeruf = beruf .. " (" .. anzahl .. " Rezepte, " .. offen .. " ohne Zutaten) " .. date("%Y-%m-%d %H:%M")
     if offen > 0 and not nochmalLesen then
         nochmalLesen = true
-        C_Timer.After(3, function()
+        O.Nach(3, function()
             RezepteLesen()
             nochmalLesen = false
         end)
@@ -668,7 +742,7 @@ local function BerufefensterOeffnen(rezeptID, anzahl)
     if not geoeffnet and C_TradeSkillUI and C_TradeSkillUI.OpenTradeSkill and r.professionID then
         geoeffnet = pcall(C_TradeSkillUI.OpenTradeSkill, r.professionID)
     end
-    C_Timer.After(0.6, function()
+    O.Nach(0.6, function()
         if offenerAuftrag and not BerufefensterVorwaehlen() then
             Daten().diagnostics.berufefenster = "selbst oeffnen " .. date("%Y-%m-%d %H:%M")
             Melden("Öffne jetzt dein Berufefenster (" .. (r.profession or "") .. "). Guild ERP wählt dann "
@@ -683,7 +757,7 @@ local function RezepteSpaeterLesen()
         return
     end
     rezepteWarten = true
-    C_Timer.After(1.5, function()
+    O.Nach(1.5, function()
         rezepteWarten = false
         local ok, beruf, anzahl = RezepteLesen()
         if ok then
@@ -1221,6 +1295,7 @@ function Kat.QuellenLesen(lesen)
     local ok, fehler = pcall(lesen)
     if not ok then
         B.Diagnose("fehler", "Quellen", fehler)
+        O.Fehler("Quellen", fehler)
     end
     Kat.VielleichtTeilen()
 end
@@ -1407,7 +1482,7 @@ end
 
 -- Knopf, der eine Auswahlliste oeffnet (Text + Pfeil)
 local function WahlKnopf(eltern, breite)
-    local b = CreateFrame("Button", nil, eltern, K.BACKDROP_VORLAGE)
+    local b = O.Rahmen("Button", nil, eltern, K.BACKDROP_VORLAGE)
     b:SetSize(breite, 26)
     Flaeche(b, { 0.07, 0.07, 0.09, 1 }, { 0.23, 0.21, 0.16, 1 })
     local hl = b:CreateTexture(nil, "HIGHLIGHT")
@@ -1448,7 +1523,7 @@ local function PopupZeigen(anker, breite, eintraege, waehlen, fussText)
         return
     end
     if not popup then
-        popup = CreateFrame("Frame", "GuildERPAuswahl", UIParent, K.BACKDROP_VORLAGE)
+        popup = O.Rahmen("Frame", "GuildERPAuswahl", UIParent, K.BACKDROP_VORLAGE)
         popup:SetFrameStrata("FULLSCREEN_DIALOG")
         popup:SetClampedToScreen(true)
         popup:EnableMouse(true)
@@ -1466,7 +1541,7 @@ local function PopupZeigen(anker, breite, eintraege, waehlen, fussText)
     for i, e in ipairs(eintraege) do
         local z = p.zeilen[i]
         if not z then
-            z = CreateFrame("Button", nil, p)
+            z = O.Rahmen("Button", nil, p)
             z:SetHeight(22)
             z.text = Schrift(z, "GameFontHighlight")
             z.rechts = Schrift(z, "GameFontHighlightSmall", false)
@@ -1549,7 +1624,7 @@ end
 -- Zeilen im Rezeptbuch (links)
 -- ---------------------------------------------------------------------------
 local function RezeptZeileBauen(eltern)
-    local z = CreateFrame("Button", nil, eltern)
+    local z = O.Rahmen("Button", nil, eltern)
     z.hg = z:CreateTexture(nil, "BACKGROUND")
     z.hg:SetAllPoints()
     z.markierung = z:CreateTexture(nil, "ARTWORK")
@@ -1614,7 +1689,7 @@ end
 -- Zeilen der Stueckliste (rechts)
 -- ---------------------------------------------------------------------------
 local function ZeileBauen(eltern)
-    local z = CreateFrame("Button", nil, eltern)
+    local z = O.Rahmen("Button", nil, eltern)
     z.hg = z:CreateTexture(nil, "BACKGROUND")
     z.hg:SetAllPoints()
     local hl = z:CreateTexture(nil, "HIGHLIGHT")
@@ -1632,7 +1707,7 @@ local function ZeileBauen(eltern)
     z.punktGlanz:SetBlendMode("ADD")
     z.punktGlanz:SetVertexColor(K.STATUS_RGB.tasche[1], K.STATUS_RGB.tasche[2], K.STATUS_RGB.tasche[3], 0.35)
     z.punkt = Raute(z, 8)
-    z.bestellen = CreateFrame("Button", nil, z, "UIPanelButtonTemplate")
+    z.bestellen = O.Rahmen("Button", nil, z, "UIPanelButtonTemplate")
     z.bestellen:SetSize(82, 20)
     z.bestellen:SetText("Bestellen")
     z.bestellen:Hide()
@@ -1644,7 +1719,7 @@ local function ZeileBauen(eltern)
     z.glanz:SetBlendMode("ADD")
     z.glanz:SetVertexColor(K.STATUS_RGB.tasche[1], K.STATUS_RGB.tasche[2], K.STATUS_RGB.tasche[3], 0.95)
     z.glanz:SetPoint("CENTER", z.icon, "CENTER", 0, 0)
-    z.chip = CreateFrame("Frame", nil, z, K.BACKDROP_VORLAGE)
+    z.chip = O.Rahmen("Frame", nil, z, K.BACKDROP_VORLAGE)
     z.chip:SetHeight(16)
     Flaeche(z.chip, { 0.36, 0.77, 0.42, 0.16 }, { 0.50, 0.94, 0.56, 0.45 })
     z.chip.text = Schrift(z.chip, "GameFontHighlightSmall")
@@ -1655,7 +1730,7 @@ local function ZeileBauen(eltern)
     z.quelle = Schrift(z, "GameFontHighlightSmall")
     z.quelle:SetTextColor(K.GEDAEMPFT[1], K.GEDAEMPFT[2], K.GEDAEMPFT[3])
     -- "Die fehlenden 8 stellt her: Barlor (4x)" - anklickbar, oeffnet die Auswahl
-    z.herst = CreateFrame("Button", nil, z)
+    z.herst = O.Rahmen("Button", nil, z)
     z.herst:SetHeight(16)
     z.herst.text = Schrift(z.herst, "GameFontHighlightSmall")
     z.herst.text:SetPoint("LEFT", 0, 0)
@@ -1875,9 +1950,9 @@ local function Liste(eltern)
     -- moderne, schmale Scrollleiste (wie im Spiel), sonst die alte Vorlage
     local ok, scroll = pcall(CreateFrame, "ScrollFrame", nil, eltern, "ScrollFrameTemplate")
     if not ok or not scroll then
-        scroll = CreateFrame("ScrollFrame", nil, eltern, "UIPanelScrollFrameTemplate")
+        scroll = O.Rahmen("ScrollFrame", nil, eltern, "UIPanelScrollFrameTemplate")
     end
-    local inhalt = CreateFrame("Frame", nil, scroll)
+    local inhalt = O.Rahmen("Frame", nil, scroll)
     inhalt:SetSize(10, 10)
     scroll:SetScrollChild(inhalt)
     scroll:SetScript("OnSizeChanged", function(self, w)
@@ -1890,7 +1965,7 @@ end
 
 local function FensterBauen()
     local d = Daten()
-    local f = CreateFrame("Frame", "GuildERPFenster", UIParent, K.BACKDROP_VORLAGE)
+    local f = O.Rahmen("Frame", "GuildERPFenster", UIParent, K.BACKDROP_VORLAGE)
     f:SetSize(900, 680)
     f:SetFrameStrata("MEDIUM")
     f:SetToplevel(true)
@@ -1930,7 +2005,7 @@ local function FensterBauen()
     f.titel:SetPoint("LEFT", f.titelIcon, "RIGHT", 8, 0)
     f.titel:SetText("Guild ERP")
     local function reiter(text, wert, vorher)
-        local b = CreateFrame("Button", nil, f)
+        local b = O.Rahmen("Button", nil, f)
         b:SetHeight(26)
         b.text = Schrift(b, "GameFontNormal")
         b.text:SetPoint("CENTER", 0, 1)
@@ -1960,11 +2035,11 @@ local function FensterBauen()
     f.reiterPlan = reiter("Planaufträge", "plan", f.reiterWerk)
     f.reiterBest = reiter("Bestellungen", "best", f.reiterPlan)
     f.reiterKat = reiter("Katalog", "kat", f.reiterBest)
-    local zu = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+    local zu = O.Rahmen("Button", nil, f, "UIPanelCloseButton")
     zu:SetPoint("TOPRIGHT", -4, -4)
     zu:SetScript("OnClick", function() f:Hide() end)
     f.zu = zu
-    f.zahnrad = CreateFrame("Button", nil, f)
+    f.zahnrad = O.Rahmen("Button", nil, f)
     f.zahnrad:SetSize(20, 20)
     f.zahnrad:SetPoint("RIGHT", zu, "LEFT", -4, 0)
     f.zahnrad:SetNormalTexture("Interface\\Icons\\INV_Misc_Gear_01")
@@ -1988,7 +2063,7 @@ local function FensterBauen()
     f.version:SetText("Version " .. K.VERSION .. " (Beta)")
 
     -- ===== Links: Rezeptbuch =====
-    local L = CreateFrame("Frame", nil, f)
+    local L = O.Rahmen("Frame", nil, f)
     L:SetPoint("TOPLEFT", 18, -46)
     L:SetPoint("BOTTOMLEFT", 18, 16)
     L:SetWidth(400)
@@ -2009,7 +2084,7 @@ local function FensterBauen()
     L.handwerk.text:SetPoint("LEFT", 12, 0)
     L.handwerk.text:SetPoint("RIGHT", L.handwerk.rechts, "LEFT", -8, 0)
 
-    L.suche = CreateFrame("EditBox", nil, L, K.BACKDROP_VORLAGE)
+    L.suche = O.Rahmen("EditBox", nil, L, K.BACKDROP_VORLAGE)
     L.suche:SetHeight(28)
     L.suche:SetPoint("TOPLEFT", 0, -80)
     L.suche:SetPoint("TOPRIGHT", 0, -80)
@@ -2054,18 +2129,18 @@ local function FensterBauen()
     f.trenner:SetColorTexture(K.GOLD_DUNKEL[1], K.GOLD_DUNKEL[2], K.GOLD_DUNKEL[3], 0.7)
 
     -- ===== Rechts: Herstellauftrag =====
-    local R = CreateFrame("Frame", nil, f)
+    local R = O.Rahmen("Frame", nil, f)
     R:SetPoint("TOPLEFT", 446, -46)
     R:SetPoint("BOTTOMRIGHT", -18, 16)
     f.rechts = R
 
-    local karte = CreateFrame("Frame", nil, R, K.BACKDROP_VORLAGE)
+    local karte = O.Rahmen("Frame", nil, R, K.BACKDROP_VORLAGE)
     karte:SetPoint("TOPLEFT", 0, 0)
     karte:SetPoint("TOPRIGHT", 0, 0)
     karte:SetHeight(64)
     Flaeche(karte, { 0.12, 0.13, 0.15, 1 }, { 0.23, 0.21, 0.16, 1 })
     R.karte = karte
-    karte.rand = CreateFrame("Frame", nil, karte, K.BACKDROP_VORLAGE)
+    karte.rand = O.Rahmen("Frame", nil, karte, K.BACKDROP_VORLAGE)
     karte.rand:SetSize(48, 48)
     karte.rand:SetPoint("TOPLEFT", 10, -8)
     Flaeche(karte.rand, { 0.07, 0.07, 0.09, 1 }, { 0.3, 0.3, 0.3, 1 })
@@ -2073,7 +2148,7 @@ local function FensterBauen()
     karte.icon:SetPoint("TOPLEFT", 2, -2)
     karte.icon:SetPoint("BOTTOMRIGHT", -2, 2)
     karte.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-    karte.plan = CreateFrame("Button", nil, karte, "UIPanelButtonTemplate")
+    karte.plan = O.Rahmen("Button", nil, karte, "UIPanelButtonTemplate")
     karte.plan:SetSize(100, 22)
     karte.plan:SetPoint("TOPRIGHT", -10, -8)
     karte.plan:SetText("Vormerken")
@@ -2115,7 +2190,7 @@ local function FensterBauen()
     end)
 
     -- Auftrag: wer stellt her, wie viele
-    local auftrag = CreateFrame("Frame", nil, karte)
+    local auftrag = O.Rahmen("Frame", nil, karte)
     auftrag:SetPoint("TOPLEFT", 10, -64)
     auftrag:SetPoint("TOPRIGHT", -10, -64)
     auftrag:SetHeight(54)
@@ -2136,7 +2211,7 @@ local function FensterBauen()
         FensterAktualisieren()
     end
     local function mengeKnopf(text, breite, um)
-        local b = CreateFrame("Button", nil, auftrag, "UIPanelButtonTemplate")
+        local b = O.Rahmen("Button", nil, auftrag, "UIPanelButtonTemplate")
         b:SetSize(breite, 26)
         b:SetText(text)
         b:SetScript("OnClick", function() mengeAendern(um) end)
@@ -2159,7 +2234,7 @@ local function FensterBauen()
     auftrag.wieText:SetText("Wie viele?")
 
     -- Bereitschaft: Text, Zaehler, Balken
-    local bereit = CreateFrame("Frame", nil, R)
+    local bereit = O.Rahmen("Frame", nil, R)
     bereit:SetPoint("TOPLEFT", karte, "BOTTOMLEFT", 0, -12)
     bereit:SetPoint("TOPRIGHT", karte, "BOTTOMRIGHT", 0, -12)
     bereit:SetHeight(48)
@@ -2179,7 +2254,7 @@ local function FensterBauen()
     end
     bereit.balken = {}
 
-    local kopf = CreateFrame("Frame", nil, R)
+    local kopf = O.Rahmen("Frame", nil, R)
     kopf:SetPoint("TOPLEFT", bereit, "BOTTOMLEFT", 0, -6)
     kopf:SetPoint("TOPRIGHT", bereit, "BOTTOMRIGHT", 0, -6)
     kopf:SetHeight(18)
@@ -2201,7 +2276,7 @@ local function FensterBauen()
     R.zeilen = {}
 
     -- Hinweis-Kasten (Bank)
-    local hinweis = CreateFrame("Frame", nil, R, K.BACKDROP_VORLAGE)
+    local hinweis = O.Rahmen("Frame", nil, R, K.BACKDROP_VORLAGE)
     hinweis:SetPoint("BOTTOMLEFT", 0, 0)
     hinweis:SetPoint("BOTTOMRIGHT", 0, 0)
     hinweis:SetHeight(42)
@@ -2214,7 +2289,7 @@ local function FensterBauen()
     hinweis.text = Schrift(hinweis, "GameFontHighlightSmall")
     hinweis.text:SetPoint("LEFT", hinweis.icon, "RIGHT", 10, 0)
     hinweis.text:SetPoint("RIGHT", -10, 0)
-    hinweis.knopf = CreateFrame("Button", nil, hinweis, "UIPanelButtonTemplate")
+    hinweis.knopf = O.Rahmen("Button", nil, hinweis, "UIPanelButtonTemplate")
     hinweis.knopf:SetSize(172, 26)
     hinweis.knopf:SetPoint("RIGHT", -10, 0)
     hinweis.knopf:SetText("Im Berufefenster öffnen")
@@ -2241,7 +2316,7 @@ local function FensterBauen()
     R.hinweis = hinweis
 
     -- Nicht gelerntes Rezept: wo man es lernt
-    local lernen = CreateFrame("Frame", nil, R, K.BACKDROP_VORLAGE)
+    local lernen = O.Rahmen("Frame", nil, R, K.BACKDROP_VORLAGE)
     lernen:SetPoint("TOPLEFT", karte, "BOTTOMLEFT", 0, -12)
     lernen:SetPoint("TOPRIGHT", karte, "BOTTOMRIGHT", 0, -12)
     lernen:SetHeight(100)
@@ -2327,7 +2402,7 @@ end
 
 -- Gruppen-Ueberschrift in der Rezeptliste (auf-/zuklappbar)
 local function KopfZeileBauen(eltern)
-    local k = CreateFrame("Button", nil, eltern)
+    local k = O.Rahmen("Button", nil, eltern)
     k:SetHeight(28)
     k.pfeil = k:CreateTexture(nil, "ARTWORK")
     k.pfeil:SetSize(13, 13)
@@ -3230,7 +3305,7 @@ function B.Takt()
     end
     B.laeuft = true
     if (GetTime and GetTime() < B.pauseBis) or (InCombatLockdown and InCombatLockdown()) then
-        C_Timer.After(1.2, B.Takt)
+        O.Nach(1.2, B.Takt)
         return
     end
     local text = table.remove(B.schlange, 1)
@@ -3264,7 +3339,7 @@ function B.Takt()
     else
         B.Diagnose("gesendet", art)
     end
-    C_Timer.After(1.2, B.Takt)
+    O.Nach(1.2, B.Takt)
 end
 
 -- Zaehler fuer den Abgleich (stehen nach /reload in den gespeicherten Daten)
@@ -3287,7 +3362,7 @@ function B.Einreihen(text)
     table.insert(B.schlange, text)
     if not B.laeuft then
         B.laeuft = true
-        C_Timer.After(0.1, B.Takt)
+        O.Nach(0.1, B.Takt)
     end
 end
 
@@ -3318,7 +3393,7 @@ function B.AllesSenden()
         return
     end
     B.wartetAlles = true
-    C_Timer.After(2, function()
+    O.Nach(2, function()
         B.wartetAlles = false
         local grenze = time() - 7 * 86400
         for _, o in pairs(B.Liste()) do
@@ -3358,6 +3433,7 @@ function B.Sicher(name, fn, ...)
     local ok, fehler = pcall(fn, ...)
     if not ok then
         B.Diagnose("fehler", name, fehler)
+        O.Fehler(name, fehler)
     end
 end
 
@@ -3382,7 +3458,7 @@ function B.StandSenden(sofort)
         return
     end
     B.wartetStand = true
-    C_Timer.After(2, function()
+    O.Nach(2, function()
         B.wartetStand = false
         if not B.InGruppe() then
             return
@@ -3590,7 +3666,7 @@ function B.Empfangen(text, absender)
                 end
             end
             if kann then
-                C_Timer.After(1.5, function()
+                O.Nach(1.5, function()
                     local teile, rezept = {}, false
                     for _, z in ipairs(o.zeilen) do
                         table.insert(teile, z.n .. "× " .. B.ZName(z))
@@ -3814,7 +3890,7 @@ function B.Tinte(fs, zweit)
 end
 
 function B.Knopf(eltern, text, breite)
-    local b = CreateFrame("Button", nil, eltern, "UIPanelButtonTemplate")
+    local b = O.Rahmen("Button", nil, eltern, "UIPanelButtonTemplate")
     b:SetSize(breite or 110, 24)
     b:SetText(text)
     return b
@@ -3825,7 +3901,7 @@ end
 -- eintraege: { {itemID, n, an = true/false, hinweis = "..."} }
 -- ---------------------------------------------------------------------------
 function B.ScheinBauen()
-    local s = CreateFrame("Frame", "GuildERPBestellschein", Fenster, K.BACKDROP_VORLAGE)
+    local s = O.Rahmen("Frame", "GuildERPBestellschein", Fenster, K.BACKDROP_VORLAGE)
     s.deckend = true
     s:SetSize(480, 420)
     s:SetPoint("TOPRIGHT", Fenster, "TOPRIGHT", -24, -58)
@@ -3852,7 +3928,7 @@ function B.ScheinBauen()
     s.notizText = Schrift(s, "GameFontHighlightSmall")
     B.Tinte(s.notizText, true)
     s.notizText:SetText("Notiz, wenn du magst")
-    s.notiz = CreateFrame("EditBox", nil, s, K.BACKDROP_VORLAGE)
+    s.notiz = O.Rahmen("EditBox", nil, s, K.BACKDROP_VORLAGE)
     s.notiz:SetSize(206, 26)
     s.notiz:SetAutoFocus(false)
     s.notiz:SetFontObject("GameFontHighlight")
@@ -3882,7 +3958,7 @@ function B.ScheinZeile(s, i)
     if z then
         return z
     end
-    z = CreateFrame("Frame", nil, s)
+    z = O.Rahmen("Frame", nil, s)
     z:SetHeight(38)
     z:EnableMouse(true)
     z:SetScript("OnEnter", function(self) B.ZeilenTooltip(self) end)
@@ -3891,7 +3967,7 @@ function B.ScheinZeile(s, i)
             GameTooltip:Hide()
         end
     end)
-    z.haken = CreateFrame("CheckButton", nil, z, "UICheckButtonTemplate")
+    z.haken = O.Rahmen("CheckButton", nil, z, "UICheckButtonTemplate")
     z.haken:SetSize(24, 24)
     z.haken:SetPoint("LEFT", -4, 0)
     z.name = Schrift(z, "GameFontHighlight")
@@ -4022,7 +4098,7 @@ end
 function B.ZusageOeffnen(anker, o, z)
     local e = B.zusage
     if not e then
-        e = CreateFrame("Frame", "GuildERPZusage", Fenster, K.BACKDROP_VORLAGE)
+        e = O.Rahmen("Frame", "GuildERPZusage", Fenster, K.BACKDROP_VORLAGE)
         e.deckend = true
         e:SetSize(330, 132)
         e:SetFrameStrata("DIALOG")
@@ -4046,7 +4122,7 @@ function B.ZusageOeffnen(anker, o, z)
         B.Tinte(e.von, true)
         e.weg = WahlKnopf(e, 170)
         e.weg:SetPoint("TOPRIGHT", -14, -38)
-        e.plan = CreateFrame("CheckButton", nil, e, "UICheckButtonTemplate")
+        e.plan = O.Rahmen("CheckButton", nil, e, "UICheckButtonTemplate")
         e.plan:SetSize(22, 22)
         e.plan:SetPoint("TOPLEFT", 12, -70)
         e.planText = Schrift(e, "GameFontHighlight")
@@ -4138,7 +4214,7 @@ function B.Hinweis(titel, text, unter, o)
     end
     local h = B.hinweisFenster
     if not h then
-        h = CreateFrame("Frame", "GuildERPHinweis", UIParent, K.BACKDROP_VORLAGE)
+        h = O.Rahmen("Frame", "GuildERPHinweis", UIParent, K.BACKDROP_VORLAGE)
         h:SetSize(440, 110)
         h:SetPoint("TOP", 0, -120)
         h:SetFrameStrata("DIALOG")
@@ -4161,9 +4237,9 @@ function B.Hinweis(titel, text, unter, o)
         h.unter:SetPoint("TOPLEFT", h.text, "BOTTOMLEFT", 0, -3)
         h.unter:SetPoint("RIGHT", -16, 0)
         h.unter:SetTextColor(0.72, 0.67, 0.55)
-        h.ansehen = CreateFrame("Button", nil, h, "UIPanelButtonTemplate")
+        h.ansehen = O.Rahmen("Button", nil, h, "UIPanelButtonTemplate")
         h.ansehen:SetSize(100, 24)
-        h.spaeter = CreateFrame("Button", nil, h, "UIPanelButtonTemplate")
+        h.spaeter = O.Rahmen("Button", nil, h, "UIPanelButtonTemplate")
         h.spaeter:SetSize(90, 24)
         h.spaeter:SetText("Später")
         h.spaeter:SetScript("OnClick", function() h:Hide() end)
@@ -4194,13 +4270,13 @@ end
 -- Ansicht "Bestellungen"
 -- ---------------------------------------------------------------------------
 function B.AnsichtBauen(f)
-    local a = CreateFrame("Frame", nil, f)
+    local a = O.Rahmen("Frame", nil, f)
     a:SetPoint("TOPLEFT", 18, -52)
     a:SetPoint("BOTTOMRIGHT", -18, 16)
     a:Hide()
     a.spalten = {}
     for i, titel in ipairs({ "Bei dir bestellt", "Deine Bestellungen" }) do
-        local sp = CreateFrame("Frame", nil, a)
+        local sp = O.Rahmen("Frame", nil, a)
         sp:SetPoint("TOP", 0, 0)
         sp:SetPoint("BOTTOM", 0, 0)
         if i == 1 then
@@ -4244,7 +4320,7 @@ function B.SchnZeile(sch, i)
     if z then
         return z
     end
-    z = CreateFrame("Frame", nil, sch)
+    z = O.Rahmen("Frame", nil, sch)
     z:EnableMouse(true)
     z:SetScript("OnEnter", function(self) B.ZeilenTooltip(self) end)
     z:SetScript("OnLeave", function()
@@ -4273,7 +4349,7 @@ function B.SchnZeile(sch, i)
 end
 
 function B.SchnBauen(eltern)
-    local s = CreateFrame("Frame", nil, eltern, K.BACKDROP_VORLAGE)
+    local s = O.Rahmen("Frame", nil, eltern, K.BACKDROP_VORLAGE)
     B.Pergament(s)
     s.titel = Schrift(s, "GameFontNormalLarge")
     s.titel:SetPoint("TOPLEFT", 14, -10)
@@ -4780,7 +4856,7 @@ end
 
 -- ----- Ansicht "Planauftraege" -----
 function P.AnsichtBauen(f)
-    local a = CreateFrame("Frame", nil, f)
+    local a = O.Rahmen("Frame", nil, f)
     a:SetPoint("TOPLEFT", 18, -52)
     a:SetPoint("BOTTOMRIGHT", -18, 16)
     a:Hide()
@@ -4807,9 +4883,9 @@ function P.AnsichtBauen(f)
 end
 
 function P.KarteBauen(eltern)
-    local k = CreateFrame("Frame", nil, eltern, K.BACKDROP_VORLAGE)
+    local k = O.Rahmen("Frame", nil, eltern, K.BACKDROP_VORLAGE)
     Flaeche(k, { 0.11, 0.10, 0.08, 1 }, { K.GOLD_DUNKEL[1], K.GOLD_DUNKEL[2], K.GOLD_DUNKEL[3], 1 })
-    k.kopf = CreateFrame("Button", nil, k)
+    k.kopf = O.Rahmen("Button", nil, k)
     k.kopf:SetPoint("TOPLEFT", 0, 0)
     k.kopf:SetPoint("TOPRIGHT", 0, 0)
     k.kopf:SetHeight(84)
@@ -4824,21 +4900,21 @@ function P.KarteBauen(eltern)
     k.icon:SetPoint("TOPLEFT", 32, -10)
     k.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     -- Aktionszeile unten (ab 1.0.1): Hauptknopf, Auftragsnetz, Stornieren leise rechts
-    k.aktionen = CreateFrame("Frame", nil, k)
+    k.aktionen = O.Rahmen("Frame", nil, k)
     k.aktionen:SetHeight(38)
     k.aktionen.linie = k.aktionen:CreateTexture(nil, "ARTWORK")
     k.aktionen.linie:SetHeight(1)
     k.aktionen.linie:SetPoint("TOPLEFT", 1, 0)
     k.aktionen.linie:SetPoint("TOPRIGHT", -1, 0)
     k.aktionen.linie:SetColorTexture(1, 1, 1, 0.07)
-    k.werkstatt = CreateFrame("Button", nil, k.aktionen, "UIPanelButtonTemplate")
+    k.werkstatt = O.Rahmen("Button", nil, k.aktionen, "UIPanelButtonTemplate")
     k.werkstatt:SetHeight(24)
     k.werkstatt:SetPoint("LEFT", 80, -1)
-    k.netz = CreateFrame("Button", nil, k.aktionen, "UIPanelButtonTemplate")
+    k.netz = O.Rahmen("Button", nil, k.aktionen, "UIPanelButtonTemplate")
     k.netz:SetHeight(24)
     k.netz:SetPoint("LEFT", k.werkstatt, "RIGHT", 8, 0)
     k.netz:SetText("Auftragsnetz")
-    k.storno = CreateFrame("Button", nil, k.aktionen)
+    k.storno = O.Rahmen("Button", nil, k.aktionen)
     k.storno:SetHeight(22)
     k.storno:SetPoint("RIGHT", -14, -1)
     k.storno.text = Schrift(k.storno, "GameFontNormal", false)
@@ -4866,16 +4942,16 @@ function P.KarteBauen(eltern)
         end
     end)
     -- roter Hinweis: der Besteller hat storniert
-    k.banner = CreateFrame("Frame", nil, k, K.BACKDROP_VORLAGE)
+    k.banner = O.Rahmen("Frame", nil, k, K.BACKDROP_VORLAGE)
     k.banner:SetPoint("TOPLEFT", 1, -1)
     k.banner:SetPoint("TOPRIGHT", -1, -1)
     k.banner:SetHeight(34)
     Flaeche(k.banner, { 0.23, 0.09, 0.07, 1 }, { 0.88, 0.38, 0.29, 1 })
-    k.banner.behalten = CreateFrame("Button", nil, k.banner, "UIPanelButtonTemplate")
+    k.banner.behalten = O.Rahmen("Button", nil, k.banner, "UIPanelButtonTemplate")
     k.banner.behalten:SetSize(90, 22)
     k.banner.behalten:SetPoint("RIGHT", -8, 0)
     k.banner.behalten:SetText("Behalten")
-    k.banner.auch = CreateFrame("Button", nil, k.banner, "UIPanelButtonTemplate")
+    k.banner.auch = O.Rahmen("Button", nil, k.banner, "UIPanelButtonTemplate")
     k.banner.auch:SetSize(120, 22)
     k.banner.auch:SetPoint("RIGHT", k.banner.behalten, "LEFT", -6, 0)
     k.banner.auch:SetText("Auch stornieren")
@@ -4926,7 +5002,7 @@ function P.ZeileBauen(k, i)
     if z then
         return z
     end
-    z = CreateFrame("Button", nil, k)
+    z = O.Rahmen("Button", nil, k)
     z.hg = z:CreateTexture(nil, "BACKGROUND")
     z.hg:SetAllPoints()
     z.linie = z:CreateTexture(nil, "ARTWORK")
@@ -5298,7 +5374,7 @@ end
 K.NETZ_LUECKE = 12
 
 function P.NetzBauen()
-    local n = CreateFrame("Frame", "GuildERPNetz", UIParent, K.BACKDROP_VORLAGE)
+    local n = O.Rahmen("Frame", "GuildERPNetz", UIParent, K.BACKDROP_VORLAGE)
     n:SetSize(900, 620)
     n:SetPoint("CENTER", 0, 20)
     n:SetFrameStrata("HIGH")
@@ -5324,10 +5400,10 @@ function P.NetzBauen()
     n.unter = Schrift(n, "GameFontHighlightSmall", false)
     n.unter:SetPoint("TOPLEFT", n.titel, "BOTTOMLEFT", 0, -3)
     n.unter:SetTextColor(K.GEDAEMPFT[1], K.GEDAEMPFT[2], K.GEDAEMPFT[3])
-    local zu = CreateFrame("Button", nil, n, "UIPanelCloseButton")
+    local zu = O.Rahmen("Button", nil, n, "UIPanelCloseButton")
     zu:SetPoint("TOPRIGHT", -4, -4)
     zu:SetScript("OnClick", function() n:Hide() end)
-    n.werkstatt = CreateFrame("Button", nil, n, "UIPanelButtonTemplate")
+    n.werkstatt = O.Rahmen("Button", nil, n, "UIPanelButtonTemplate")
     n.werkstatt:SetSize(180, 24)
     n.werkstatt:SetPoint("RIGHT", zu, "LEFT", -6, 0)
     n.werkstatt:SetText("In der Werkstatt öffnen")
@@ -5368,7 +5444,7 @@ function P.NetzBauen()
 end
 
 function P.KachelBauen(eltern)
-    local t = CreateFrame("Button", nil, eltern, K.BACKDROP_VORLAGE)
+    local t = O.Rahmen("Button", nil, eltern, K.BACKDROP_VORLAGE)
     t.streifen = t:CreateTexture(nil, "ARTWORK")
     t.streifen:SetWidth(4)
     t.streifen:SetPoint("TOPLEFT", 1, -1)
@@ -5591,7 +5667,7 @@ K.AH_PAUSE = 10          -- Pause, wenn der Spieler selbst sucht
 K.AH_AUSREISSER = 3      -- Angebote ueber dem Dreifachen des guenstigsten zaehlen nicht
 
 function A.Neu()
-    C_Timer.After(0.3, function()
+    O.Nach(0.3, function()
         FensterAktualisieren()
     end)
 end
@@ -5749,7 +5825,7 @@ function A.Start()
     A.gestoppt, A.blockiert, A.warteAuf = false, false, nil
     A.FensterZeigen()
     if A.laeuft then
-        C_Timer.After(1.5, A.Takt)
+        O.Nach(1.5, A.Takt)
     end
 end
 
@@ -5760,12 +5836,12 @@ function A.Takt()
     local jetzt = GetTime and GetTime() or 0
     if A.pauseBis and jetzt < A.pauseBis then
         A.FensterZeigen()
-        C_Timer.After(1, A.Takt)
+        O.Nach(1, A.Takt)
         return
     end
     -- auf Antwort warten (hoechstens K.AH_WARTEN Sekunden)
     if A.warteAuf and jetzt - (A.gesendet or 0) < K.AH_WARTEN then
-        C_Timer.After(0.25, A.Takt)
+        O.Nach(0.25, A.Takt)
         return
     end
     if A.warteAuf then
@@ -5789,7 +5865,7 @@ function A.Takt()
         A.Fertig(id, nil)
     end
     A.FensterZeigen()
-    C_Timer.After(K.AH_TAKT, A.Takt)
+    O.Nach(K.AH_TAKT, A.Takt)
 end
 
 -- Ergebnis auswerten. angebote = {{preis je Stueck, menge}} oder nil (keine Antwort)
@@ -5857,9 +5933,11 @@ function A.Ereignis(event, ...)
             A.gehookt = true
             -- sucht der Spieler selbst, macht Guild ERP eine Pause (nur beobachten, nichts aendern)
             local function selbst()
-                if not A.eigeneSuche then
-                    A.pauseBis = (GetTime and GetTime() or 0) + K.AH_PAUSE
-                end
+                O.Sicher("AH-Beobachtung", function()
+                    if not A.eigeneSuche then
+                        A.pauseBis = (GetTime and GetTime() or 0) + K.AH_PAUSE
+                    end
+                end)
             end
             for _, f in ipairs({ "SendBrowseQuery", "SendSearchQuery", "SendSellSearchQuery" }) do
                 if C_AuctionHouse[f] then
@@ -5869,11 +5947,11 @@ function A.Ereignis(event, ...)
         end
         local modus = O.Wert("ah")
         if modus == "auto" then
-            C_Timer.After(0.5, A.Start)
+            O.Nach(0.5, A.Start)
         elseif modus == "knopf" then
             A.aufKnopf = true
             A.gesamt, A.fertig, A.laeuft, A.letzte = 0, 0, false, {}
-            C_Timer.After(0.5, A.FensterZeigen)
+            O.Nach(0.5, A.FensterZeigen)
         end
         return true
     elseif event == "AUCTION_HOUSE_CLOSED" then
@@ -5908,7 +5986,7 @@ end
 
 -- ----- Fenster neben dem Auktionshaus -----
 function A.FensterBauen()
-    local w = CreateFrame("Frame", "GuildERPPreise", UIParent, K.BACKDROP_VORLAGE)
+    local w = O.Rahmen("Frame", "GuildERPPreise", UIParent, K.BACKDROP_VORLAGE)
     w:SetSize(300, 330)
     w:SetFrameStrata("HIGH")
     w:SetClampedToScreen(true)
@@ -5950,7 +6028,7 @@ function A.FensterBauen()
     w.hinweis = Schrift(w, "GameFontDisableSmall")
     w.hinweis:SetPoint("BOTTOMLEFT", 16, 18)
     w.hinweis:SetPoint("RIGHT", -110, 0)
-    w.knopf = CreateFrame("Button", nil, w, "UIPanelButtonTemplate")
+    w.knopf = O.Rahmen("Button", nil, w, "UIPanelButtonTemplate")
     w.knopf:SetSize(86, 24)
     w.knopf:SetPoint("BOTTOMRIGHT", -14, 14)
     w:Hide()
@@ -6285,7 +6363,7 @@ function Kat.VielleichtTeilen()
         return
     end
     Kat.teilenWartet = true
-    C_Timer.After(60, function()
+    O.Nach(60, function()
         Kat.teilenWartet = false
         if B.InGruppe() and Kat.TeilenZahl() ~= Kat.teilenGemeldet then
             B.Sicher("Teilen", Kat.TeilenStandSenden)
@@ -6539,11 +6617,11 @@ end
 
 -- ----- Ansicht "Katalog" -----
 function Kat.AnsichtBauen(f)
-    local a = CreateFrame("Frame", nil, f)
+    local a = O.Rahmen("Frame", nil, f)
     a:SetPoint("TOPLEFT", 18, -46)
     a:SetPoint("BOTTOMRIGHT", -18, 16)
     a:Hide()
-    local L = CreateFrame("Frame", nil, a)
+    local L = O.Rahmen("Frame", nil, a)
     L:SetPoint("TOPLEFT", 0, 0)
     L:SetPoint("BOTTOMLEFT", 0, 0)
     L:SetWidth(400)
@@ -6562,7 +6640,7 @@ function Kat.AnsichtBauen(f)
     L.beruf.text:ClearAllPoints()
     L.beruf.text:SetPoint("LEFT", 12, 0)
     L.beruf.text:SetPoint("RIGHT", L.beruf.rechts, "LEFT", -8, 0)
-    L.suche = CreateFrame("EditBox", nil, L, K.BACKDROP_VORLAGE)
+    L.suche = O.Rahmen("EditBox", nil, L, K.BACKDROP_VORLAGE)
     L.suche:SetHeight(28)
     L.suche:SetPoint("TOPLEFT", 0, -80)
     L.suche:SetPoint("TOPRIGHT", 0, -80)
@@ -6591,7 +6669,7 @@ function Kat.AnsichtBauen(f)
     L.leer:SetPoint("TOPLEFT", 4, -6)
     L.leer:SetPoint("RIGHT", L.inhalt, "RIGHT", -4, 0)
     L.leer:SetTextColor(K.GEDAEMPFT[1], K.GEDAEMPFT[2], K.GEDAEMPFT[3])
-    L.abgleich = CreateFrame("Button", nil, L, "UIPanelButtonTemplate")
+    L.abgleich = O.Rahmen("Button", nil, L, "UIPanelButtonTemplate")
     L.abgleich:SetSize(130, 22)
     L.abgleich:SetPoint("BOTTOMRIGHT", 0, 0)
     L.abgleich:SetText("Jetzt abgleichen")
@@ -6607,10 +6685,10 @@ function Kat.AnsichtBauen(f)
     a.trenner:SetPoint("BOTTOMLEFT", 414, 2)
     a.trenner:SetColorTexture(K.GOLD_DUNKEL[1], K.GOLD_DUNKEL[2], K.GOLD_DUNKEL[3], 0.7)
     -- rechts: gewaehltes Rezept
-    local R = CreateFrame("Frame", nil, a)
+    local R = O.Rahmen("Frame", nil, a)
     R:SetPoint("TOPLEFT", 430, 0)
     R:SetPoint("BOTTOMRIGHT", 0, 0)
-    R.karte = CreateFrame("Frame", nil, R, K.BACKDROP_VORLAGE)
+    R.karte = O.Rahmen("Frame", nil, R, K.BACKDROP_VORLAGE)
     R.karte:SetPoint("TOPLEFT", 0, -2)
     R.karte:SetPoint("TOPRIGHT", 0, -2)
     R.karte:SetHeight(66)
@@ -6646,7 +6724,7 @@ function Kat.AnsichtBauen(f)
         R.zutaten:SetSpacing(4)
     end
     -- Bestellfeld (ab 1.0)
-    local F = CreateFrame("Frame", nil, R, K.BACKDROP_VORLAGE)
+    local F = O.Rahmen("Frame", nil, R, K.BACKDROP_VORLAGE)
     F:SetPoint("BOTTOMLEFT", 0, 0)
     F:SetPoint("BOTTOMRIGHT", 0, 0)
     F:SetHeight(196)
@@ -6662,7 +6740,7 @@ function Kat.AnsichtBauen(f)
         return t
     end
     label("Wie viele?", -44)
-    F.minus = CreateFrame("Button", nil, F, "UIPanelButtonTemplate")
+    F.minus = O.Rahmen("Button", nil, F, "UIPanelButtonTemplate")
     F.minus:SetSize(26, 24)
     F.minus:SetPoint("TOPLEFT", 104, -38)
     F.minus:SetText("-")
@@ -6670,7 +6748,7 @@ function Kat.AnsichtBauen(f)
     F.menge:SetWidth(36)
     F.menge:SetJustifyH("CENTER")
     F.menge:SetPoint("LEFT", F.minus, "RIGHT", 2, 0)
-    F.plus = CreateFrame("Button", nil, F, "UIPanelButtonTemplate")
+    F.plus = O.Rahmen("Button", nil, F, "UIPanelButtonTemplate")
     F.plus:SetSize(26, 24)
     F.plus:SetPoint("LEFT", F.menge, "RIGHT", 2, 0)
     F.plus:SetText("+")
@@ -6681,7 +6759,7 @@ function Kat.AnsichtBauen(f)
     F.mats = WahlKnopf(F, 260)
     F.mats:SetPoint("TOPLEFT", 104, -102)
     label("Notiz", -140)
-    F.notiz = CreateFrame("EditBox", nil, F, K.BACKDROP_VORLAGE)
+    F.notiz = O.Rahmen("EditBox", nil, F, K.BACKDROP_VORLAGE)
     F.notiz:SetHeight(24)
     F.notiz:SetPoint("TOPLEFT", 104, -134)
     F.notiz:SetPoint("RIGHT", -12, 0)
@@ -6692,7 +6770,7 @@ function Kat.AnsichtBauen(f)
     Flaeche(F.notiz, { 0.07, 0.07, 0.09, 1 }, { 0.23, 0.21, 0.16, 1 })
     F.notiz:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     F.notiz:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-    F.knopf = CreateFrame("Button", nil, F, "UIPanelButtonTemplate")
+    F.knopf = O.Rahmen("Button", nil, F, "UIPanelButtonTemplate")
     F.knopf:SetSize(110, 26)
     F.knopf:SetPoint("BOTTOMRIGHT", -10, 10)
     F.knopf:SetText("Bestellen")
@@ -6715,7 +6793,7 @@ function Kat.AnsichtBauen(f)
 end
 
 function Kat.ZeileBauen(eltern)
-    local z = CreateFrame("Button", nil, eltern)
+    local z = O.Rahmen("Button", nil, eltern)
     z:SetHeight(32)
     z.hg = z:CreateTexture(nil, "BACKGROUND")
     z.hg:SetAllPoints()
@@ -6936,7 +7014,7 @@ function O.PostFenster()
     if not anker then
         return nil
     end
-    w = CreateFrame("Frame", "GuildERPPost", _G.MailFrame or UIParent, K.BACKDROP_VORLAGE)
+    w = O.Rahmen("Frame", "GuildERPPost", _G.MailFrame or UIParent, K.BACKDROP_VORLAGE)
     w:SetWidth(300)
     w:SetPoint("TOPLEFT", _G.MailFrame or anker, "TOPRIGHT", 4, -24)
     if w.SetBackdrop then
@@ -6993,7 +7071,7 @@ function O.PostPruefen()
     for k, e in ipairs(fremde) do
         local z = w.zeilen[k]
         if not z then
-            z = CreateFrame("Frame", nil, w)
+            z = O.Rahmen("Frame", nil, w)
             z:SetHeight(26)
             z.text = Schrift(z, "GameFontHighlightSmall")
             z.text:SetPoint("LEFT", 0, 0)
@@ -7001,7 +7079,7 @@ function O.PostPruefen()
             if z.text.SetWordWrap then
                 z.text:SetWordWrap(false)
             end
-            z.knopf = CreateFrame("Button", nil, z, "UIPanelButtonTemplate")
+            z.knopf = O.Rahmen("Button", nil, z, "UIPanelButtonTemplate")
             z.knopf:SetSize(106, 22)
             z.knopf:SetPoint("RIGHT", 0, 0)
             z.knopf:SetText("Zurücksenden")
@@ -7042,10 +7120,12 @@ function O.PostSendenWarnung()
     warn:Hide()
     O.postWarn = warn
     feld:HookScript("OnTextChanged", function(self)
-        local t = self:GetText() or ""
-        local zeigen = O.GildeModus() and t ~= "" and O.GildeBekannt() and not O.InGilde(t)
-        warn:SetText(zeigen and "Guild-Found: nicht in deiner Gilde" or "")
-        warn:SetShown(zeigen and true or false)
+        O.Sicher("Post-Warnung", function()
+            local t = self:GetText() or ""
+            local zeigen = O.GildeModus() and t ~= "" and O.GildeBekannt() and not O.InGilde(t)
+            warn:SetText(zeigen and "Guild-Found: nicht in deiner Gilde" or "")
+            warn:SetShown(zeigen and true or false)
+        end)
     end)
 end
 
@@ -7454,7 +7534,7 @@ function O.Lage(f, dy)
 end
 
 function O.RahmenBauen(f)
-    local r = CreateFrame("Frame", nil, f)
+    local r = O.Rahmen("Frame", nil, f)
     r:SetAllPoints()
     r:SetFrameLevel((f:GetFrameLevel() or 1) + 40)
     local ok = NineSliceUtil and NineSliceUtil.ApplyLayoutByName and pcall(NineSliceUtil.ApplyLayoutByName, r, "PortraitFrameTemplate")
@@ -7513,7 +7593,7 @@ function O.RahmenBauen(f)
         { f.reiterKat, "kat", "Interface\\Icons\\INV_Misc_Book_11", "Katalog" },
     }
     for i, e in ipairs(liste) do
-        local b = CreateFrame("Button", nil, f)
+        local b = O.Rahmen("Button", nil, f)
         b:SetSize(55, 60)
         b:SetPoint("TOPLEFT", f, "TOPRIGHT", -2, -44 - (i - 1) * 62)
         b.wert = e[2]
@@ -7879,7 +7959,7 @@ function Kat.Gruppe(rid, itemID, name)
 end
 
 function Kat.KopfBauen(eltern)
-    local k = CreateFrame("Button", nil, eltern)
+    local k = O.Rahmen("Button", nil, eltern)
     k:SetHeight(30)
     local hl = k:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints()
@@ -8166,7 +8246,7 @@ function Kat.Zutaten(rid)
 end
 
 function Kat.BaumZeileBauen(eltern)
-    local z = CreateFrame("Button", nil, eltern)
+    local z = O.Rahmen("Button", nil, eltern)
     z.hg = z:CreateTexture(nil, "BACKGROUND")
     z.hg:SetAllPoints()
     z.linie = z:CreateTexture(nil, "ARTWORK")
@@ -8479,7 +8559,7 @@ end
 function P.StornoOeffnen(art, obj)
     local w = P.stornoFenster
     if not w then
-        w = CreateFrame("Frame", "GuildERPStorno", UIParent, K.BACKDROP_VORLAGE)
+        w = O.Rahmen("Frame", "GuildERPStorno", UIParent, K.BACKDROP_VORLAGE)
         w:SetWidth(560)
         w:SetPoint("CENTER", 0, 60)
         w:SetFrameStrata("DIALOG")
@@ -8501,11 +8581,11 @@ function P.StornoOeffnen(art, obj)
         w.frage:SetText("WAS HÄNGT DARAN?")
         w.punkte = {}
         w.infos = {}
-        w.ab = CreateFrame("Button", nil, w, "UIPanelButtonTemplate")
+        w.ab = O.Rahmen("Button", nil, w, "UIPanelButtonTemplate")
         w.ab:SetSize(100, 26)
         w.ab:SetText("Abbrechen")
         w.ab:SetScript("OnClick", function() w:Hide() end)
-        w.ok = CreateFrame("Button", nil, w, "UIPanelButtonTemplate")
+        w.ok = O.Rahmen("Button", nil, w, "UIPanelButtonTemplate")
         w.ok:SetSize(120, 26)
         w.ok:SetText("Stornieren")
         w.ok:SetPoint("BOTTOMRIGHT", -16, 14)
@@ -8536,7 +8616,7 @@ function P.StornoOeffnen(art, obj)
     for i, pkt in ipairs(punkte) do
         local p = w.punkte[i]
         if not p then
-            p = CreateFrame("CheckButton", nil, w, "UICheckButtonTemplate")
+            p = O.Rahmen("CheckButton", nil, w, "UICheckButtonTemplate")
             p:SetSize(24, 24)
             p.text = Schrift(w, "GameFontHighlight")
             p.unter = Schrift(w, "GameFontHighlightSmall")
@@ -8674,7 +8754,7 @@ function O.KnopfBauen()
     if O.knopf or not Minimap then
         return O.knopf
     end
-    local k = CreateFrame("Button", "GuildERPMinimapKnopf", Minimap)
+    local k = O.Rahmen("Button", "GuildERPMinimapKnopf", Minimap)
     k:SetSize(32, 32)
     k:SetFrameStrata("MEDIUM")
     k:SetFrameLevel((Minimap:GetFrameLevel() or 1) + 8)
@@ -8816,7 +8896,7 @@ end
 function O.Zeigen()
     local w = O.fenster
     if not w then
-        w = CreateFrame("Frame", "GuildERPOptionen", UIParent, K.BACKDROP_VORLAGE)
+        w = O.Rahmen("Frame", "GuildERPOptionen", UIParent, K.BACKDROP_VORLAGE)
         w:SetSize(520, 400)
         w:SetPoint("CENTER", 0, 40)
         w:SetFrameStrata("HIGH")
@@ -8838,7 +8918,7 @@ function O.Zeigen()
         w.titel = Schrift(w, "GameFontNormalLarge")
         w.titel:SetPoint("TOPLEFT", 20, -18)
         w.titel:SetText("Optionen")
-        local zu = CreateFrame("Button", nil, w, "UIPanelCloseButton")
+        local zu = O.Rahmen("Button", nil, w, "UIPanelCloseButton")
         zu:SetPoint("TOPRIGHT", -4, -4)
         w.zeilen = {}
         local y = 52
@@ -8883,7 +8963,7 @@ function O.Zeigen()
             table.insert(w.zeilen, b)
         end
         local function haken(z, name)
-            local c = CreateFrame("CheckButton", nil, w, "UICheckButtonTemplate")
+            local c = O.Rahmen("CheckButton", nil, w, "UICheckButtonTemplate")
             c:SetSize(26, 26)
             c:SetPoint("TOPRIGHT", -18, -(z.y - 6))
             c.zeigen = function() c:SetChecked(O.Wert(name) and true or false) end
@@ -8917,7 +8997,7 @@ function O.Zeigen()
         local zr = zeile("Reihenfolge der Reiter", "Mit den Pfeilen nach oben oder unten schieben")
         local reihe = { zeigen = function() end, zeilen = {} }
         for i = 1, 4 do
-            local r = CreateFrame("Frame", nil, w)
+            local r = O.Rahmen("Frame", nil, w)
             r:SetSize(230, 24)
             r:SetPoint("TOPRIGHT", -20, -(zr.y - 4 + (i - 1) * 26))
             r.hg = r:CreateTexture(nil, "BACKGROUND")
@@ -8926,7 +9006,7 @@ function O.Zeigen()
             r.text = Schrift(r, "GameFontHighlight")
             r.text:SetPoint("LEFT", 8, 0)
             local function pfeil(tex, x, um)
-                local b = CreateFrame("Button", nil, r)
+                local b = O.Rahmen("Button", nil, r)
                 b:SetSize(22, 22)
                 b:SetPoint("RIGHT", x, 0)
                 b:SetNormalTexture("Interface\\Buttons\\Arrow-" .. tex .. "-Up")
@@ -8954,12 +9034,12 @@ function O.Zeigen()
         w.groesse = Schrift(w, "GameFontHighlight", false)
         w.groesse:SetWidth(56)
         w.groesse:SetJustifyH("CENTER")
-        w.plus = CreateFrame("Button", nil, w, "UIPanelButtonTemplate")
+        w.plus = O.Rahmen("Button", nil, w, "UIPanelButtonTemplate")
         w.plus:SetSize(26, 22)
         w.plus:SetText("+")
         w.plus:SetPoint("TOPRIGHT", -20, -(zg.y - 4))
         w.groesse:SetPoint("RIGHT", w.plus, "LEFT", -2, 0)
-        w.minus = CreateFrame("Button", nil, w, "UIPanelButtonTemplate")
+        w.minus = O.Rahmen("Button", nil, w, "UIPanelButtonTemplate")
         w.minus:SetSize(26, 22)
         w.minus:SetText("-")
         w.minus:SetPoint("RIGHT", w.groesse, "LEFT", -2, 0)
@@ -8969,7 +9049,7 @@ function O.Zeigen()
         end
         w.plus:SetScript("OnClick", function() groesse(5) end)
         w.minus:SetScript("OnClick", function() groesse(-5) end)
-        w.fertig = CreateFrame("Button", nil, w, "UIPanelButtonTemplate")
+        w.fertig = O.Rahmen("Button", nil, w, "UIPanelButtonTemplate")
         w.fertig:SetSize(100, 26)
         w.fertig:SetPoint("BOTTOMRIGHT", -18, 16)
         w.fertig:SetText("Fertig")
@@ -9082,7 +9162,7 @@ local function FensterSpaeterAktualisieren()
         return
     end
     aktualisierenWartet = true
-    C_Timer.After(0.5, function()
+    O.Nach(0.5, function()
         aktualisierenWartet = false
         FensterAktualisieren()
     end)
@@ -9096,7 +9176,7 @@ local function FensterUmschalten()
         Fenster:Hide()
     else
         Fenster:Show()
-        C_Timer.After(0.05, FensterAktualisieren)
+        O.Nach(0.05, FensterAktualisieren)
     end
 end
 
@@ -9132,6 +9212,12 @@ local function StandZeigen()
         .. ", bekannte Gegenstandsnamen: " .. namenZahl
         .. ", Rezepte mit gemerkter Quelle: " .. Kat.QuellenZahl()
         .. ", Reiseführer (optional): " .. (Reisefuehrer() and "gefunden" or "nicht installiert"))
+    local fehler = d.diagnostics.fehler or {}
+    print("Fehler seit dieser Version: " .. (#fehler == 0 and "keine" or #fehler))
+    for i = #fehler, math.max(1, #fehler - 4), -1 do
+        local e = fehler[i]
+        print("  " .. e.n .. "x " .. e.ort .. " (" .. Alter(e.at) .. "): " .. e.text)
+    end
 end
 
 -- ---------------------------------------------------------------------------
@@ -9143,7 +9229,7 @@ local function TaschenSpaeterLesen()
         return
     end
     taschenWarten = true
-    C_Timer.After(1, function()
+    O.Nach(1, function()
         taschenWarten = false
         TaschenLesen()
         BankLesen()
@@ -9178,6 +9264,10 @@ elseif RegisterAddonMessagePrefix then
 end
 
 frame:SetScript("OnEvent", function(self, event, ...)
+    O.Sicher(event, O.Ereignis, event, ...)
+end)
+
+function O.Ereignis(event, ...)
     if A.Ereignis(event, ...) then
         return
     end
@@ -9193,13 +9283,14 @@ frame:SetScript("OnEvent", function(self, event, ...)
             local ok, fehler = pcall(B.Empfangen, text, absender) -- fehlerhafte Nachrichten anderer ignorieren
             if not ok then
                 B.Diagnose("fehler", "Empfang", fehler)
+                O.Fehler("Empfang", fehler)
             end
         end
         return
     elseif event == "GROUP_ROSTER_UPDATE" then
         if not B.gruppeWartet then
             B.gruppeWartet = true
-            C_Timer.After(3, function()
+            O.Nach(3, function()
                 B.gruppeWartet = false
                 B.GruppeGeaendert()
             end)
@@ -9207,10 +9298,15 @@ frame:SetScript("OnEvent", function(self, event, ...)
         return
     end
     if event == "PLAYER_LOGIN" then
-        C_Timer.After(3, function()
+        -- Fehler aelterer Versionen sind mit dem Update hinfaellig
+        local dg = Daten().diagnostics
+        if dg.fehlerVersion ~= K.VERSION then
+            dg.fehlerVersion, dg.fehler = K.VERSION, nil
+        end
+        O.Nach(3, function()
             Charakter()
             TaschenLesen()
-            C_Timer.After(5, function() pcall(Kat.Aufraeumen) end)
+            O.Nach(5, function() pcall(Kat.Aufraeumen) end)
             -- bekannte Zutaten: Namen beim Spiel anfordern (fuer die Anzeige)
             for _, r in pairs(Daten().recipes) do
                 for _, z in ipairs(r.reagents or {}) do
@@ -9234,7 +9330,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
         TaschenSpaeterLesen()
     elseif event == "BANKFRAME_OPENED" then
         bankOffen = true
-        C_Timer.After(0.5, function()
+        O.Nach(0.5, function()
             BankLesen()
             FensterSpaeterAktualisieren()
         end)
@@ -9245,17 +9341,17 @@ frame:SetScript("OnEvent", function(self, event, ...)
         RezepteSpaeterLesen()
         if not Kat.wartet then
             Kat.wartet = true
-            C_Timer.After(8, function()
+            O.Nach(8, function()
                 Kat.wartet = false
                 Kat.VielleichtMelden()
             end)
         end
         if offenerAuftrag then
-            C_Timer.After(0.3, BerufefensterVorwaehlen)
+            O.Nach(0.3, BerufefensterVorwaehlen)
         end
     elseif event == "MERCHANT_SHOW" then
-        C_Timer.After(0.5, HaendlerLesen)
-        C_Timer.After(0.5, function()
+        O.Nach(0.5, HaendlerLesen)
+        O.Nach(0.5, function()
             Kat.QuellenLesen(Kat.HaendlerRezepteLesen)
             FensterSpaeterAktualisieren()
         end)
@@ -9263,13 +9359,13 @@ frame:SetScript("OnEvent", function(self, event, ...)
         -- die Liste kann erst nach dem Oeffnen vollstaendig sein: pro Fenster einmal nachlesen
         if event == "TRAINER_SHOW" or Kat.lehrerNachlesen then
             Kat.lehrerNachlesen = event == "TRAINER_SHOW"
-            C_Timer.After(event == "TRAINER_SHOW" and 0.5 or 1, function()
+            O.Nach(event == "TRAINER_SHOW" and 0.5 or 1, function()
                 Kat.QuellenLesen(Kat.LehrerLesen)
                 FensterSpaeterAktualisieren()
             end)
         end
     elseif event == "LOOT_OPENED" then
-        C_Timer.After(0.1, function()
+        O.Nach(0.1, function()
             Kat.QuellenLesen(Kat.BeuteLesen)
             FensterSpaeterAktualisieren()
         end)
@@ -9280,11 +9376,15 @@ frame:SetScript("OnEvent", function(self, event, ...)
         end
         FensterSpaeterAktualisieren()
     end
-end)
+end
 
 SLASH_GUILDERP1 = "/gerp"
 SLASH_GUILDERP2 = "/guilderp"
 SlashCmdList["GUILDERP"] = function(eingabe)
+    O.Sicher("Befehl", O.Befehl, eingabe)
+end
+
+function O.Befehl(eingabe)
     eingabe = string.lower(strtrim(eingabe or ""))
     if eingabe == "info" or eingabe == "stand" then
         StandZeigen()
