@@ -67,6 +67,7 @@ Stand 17.10. (Nutzer): „Funktional bin ich hoch zufrieden. Jetzt gehts um den 
 ## Datenmodell (GuildERPData)
 - characters[Realm-Name] {name, voll, faction, recipes[Beruf][rezeptID], bags, bagsAt, bank, bankAt}
 - recipes[rezeptID] {name, icon, profession, professionID (Unter-Linie), itemID, reagents{{itemID, count}}, numMade, kategorie, at}
+- quellen[Rezeptname] {{art (Lehrer|Händler|Beute), wer, zone, x, y, kosten, skill, beruf, fraktion, at}}
 - items[itemID] {name, icon, q, bind}; vendors; prices[Fraktion][itemID] = {min, avg, n, at} oder {leer, at}
 - plans[rezeptID] {id, rezeptID, menge, wer (Vorname des Herstellers), at, fuer{[orderId]={n, von, mats, quittiert}}}
 - orders[id] {id, von, an, fuer, notiz, at, status, kopfRev, gesehen{}, plan, mats, ausgeblendet, zeilen{{itemID, rezeptID, n, zusagen{[Name]={n, weg 1..4, g, at}}}}}
@@ -75,7 +76,7 @@ Stand 17.10. (Nutzer): „Funktional bin ich hoch zufrieden. Jetzt gehts um den 
 - diagnostics {abgleich, optik, lookFehler, fremdesFenster, aufgeraeumt, …}
 
 ## Weitere Anforderungen
-1. Standalone-Quellen für „Noch nicht gelernt“ (Lehrer, Händler, Beute) – siehe POLISHING.md.
+1. Standalone-Quellen: seit 1.4 eingebaut, Spieltest steht aus; Teilen mit der Gilde noch offen (POLISHING.md).
 2. Spieltest Guild-Found (Handel, Flüstern, Post, Gildenabgleich mit vielen Online-Mitgliedern).
 3. Spiel-Look auf die übrigen Fenster ausdehnen, „[n]“ in der Liste.
 4. Nutzungsbedingungen prüfen, bevor die Gilde Guild ERP nutzt.

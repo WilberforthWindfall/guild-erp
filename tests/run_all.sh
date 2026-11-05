@@ -21,7 +21,7 @@ lauf() { # name, args...
 }
 for s in sim5 sim6 sim8 sim8b sim9; do lauf $s "$G" "$SV" "$FD"; done
 for s in sim14 sim16 sim17; do lauf $s "$G" "$SV" x; done
-for s in sim10 sim13 sim18 sim19 sim21; do lauf $s "$G" "$SV"; done
+for s in sim10 sim13 sim18 sim19 sim21 sim23; do lauf $s "$G" "$SV"; done
 for s in sim15 sim22; do lauf $s "$G" "$SV" "$G"; done
 lauf sim20 "$G" "$SV" Herr
 lauf sim20 "$G" "$SV" Barlor

@@ -22,3 +22,4 @@
 | sim20 | Planaufträge eigener vs. anderer Charaktere |
 | sim21 | Allianz/Horde getrennt |
 | sim22 | Guild-Found: Gildenabgleich, Handel, Post |
+| sim23 | Standalone: Lehrer, Händler und Beute ohne Reiseführer sammeln und anzeigen |

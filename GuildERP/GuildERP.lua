@@ -1,4 +1,4 @@
--- Guild ERP 1.3 (Beta)
+-- Guild ERP 1.4 (Beta)
 -- Werkstatt: links das Rezeptbuch (Handwerk waehlen, suchen), rechts der Herstellauftrag mit
 -- mehrstufiger Stueckliste und Ampel, ob alles da ist.
 -- Liest ausschliesslich ueber die normale Add-on-Schnittstelle (nur lesend) und speichert
@@ -16,13 +16,14 @@
 -- Ab 1.0: aus dem Katalog bestellen (auch Verzauberungen), Hinweisfenster, Zusage als Planauftrag,
 -- Stornieren mit Abhaengigkeiten, volle Namen (Vor- und Nachname).
 -- Ab 1.1: Katalog in Gruppen und mit Zutaten-Baum, Knopf an der Minimap, Optionen.
+-- Ab 1.4: merkt sich selbst, wo es noch nicht gelernte Rezepte gibt (Lehrer, Haendler, Beute).
 -- Ist der Reiseführer (ForeverDashboard) installiert, liest Guild ERP dessen Rezeptkatalog
--- nur mit, um noch nicht gelernte Rezepte grau zu zeigen. Ohne Reiseführer laeuft alles genauso.
+-- zusaetzlich mit. Ohne Reiseführer laeuft alles genauso.
 
 local ADDON_TITEL = "|cffd4af37Guild ERP|r"
 local frame = CreateFrame("Frame")
 local K = {} -- Konstanten (spart Platz fuer lokale Namen)
-K.VERSION = "1.3"
+K.VERSION = "1.4"
 K.ICON_UNBEKANNT = "Interface\\Icons\\INV_Misc_QuestionMark"
 K.ICON_TITEL = "Interface\\Icons\\Trade_BlackSmithing"
 K.ICON_REZEPT = "Interface\\Icons\\INV_Scroll_03"
@@ -84,6 +85,7 @@ end
 -- recipes[rezeptID] = { name, profession, itemID, icon, numMade, reagents = { {itemID, count} }, at }
 -- items[itemID] = { name, icon, q }   (Namen/Symbole/Seltenheit zwischenspeichern)
 -- vendors[itemID] = { [Haendler] = { zone, x, y, price, stack, faction, at } }
+-- quellen[Rezeptname] = { { art = "Lehrer|Händler|Beute", wer, zone, x, y, kosten, skill, beruf, fraktion, at } }
 -- settings = { window, wunsch, menge, zu, beruf, grau }
 -- ---------------------------------------------------------------------------
 local function Daten()
@@ -93,6 +95,7 @@ local function Daten()
     d.recipes = d.recipes or {}
     d.items = d.items or {}
     d.vendors = d.vendors or {}
+    d.quellen = d.quellen or {}
     d.settings = d.settings or {}
     d.diagnostics = d.diagnostics or {}
     d.orders = d.orders or {}
@@ -974,7 +977,7 @@ local function HaendlerText(h)
 end
 
 -- ---------------------------------------------------------------------------
--- Reiseführer (falls installiert): noch nicht gelernte Rezepte und wo man sie lernt.
+-- Reiseführer (falls installiert): zusaetzliche Quelle fuer noch nicht gelernte Rezepte.
 -- Nur lesend. Fremde Fraktion wird ausgeblendet.
 -- ---------------------------------------------------------------------------
 local function Reisefuehrer()
@@ -982,6 +985,218 @@ local function Reisefuehrer()
         return ForeverDashboardData
     end
     return nil
+end
+
+-- ---------------------------------------------------------------------------
+-- Eigene Quellen (ab 1.4): wo man noch nicht gelernte Rezepte bekommt. Guild ERP merkt sich
+-- nur, was der Spieler selbst gesehen hat (Lehrer, Haendler, Beute), damit nichts vorweggenommen
+-- wird. Nur lesen: nichts wird gelernt, gekauft oder aufgehoben, Filter im Lehrerfenster bleiben.
+-- ---------------------------------------------------------------------------
+K.LEHRER_ARTEN = { header = true, available = true, unavailable = true, used = true }
+
+-- Neue Quelle anlegen oder bekannte auffrischen. Liefert true, wenn sie neu ist.
+function Kat.QuelleMerken(rezept, q)
+    local d = Daten()
+    local liste = d.quellen[rezept] or {}
+    d.quellen[rezept] = liste
+    q.at = time()
+    for i, alt in ipairs(liste) do
+        if alt.art == q.art and alt.wer == q.wer and alt.zone == q.zone and alt.beruf == q.beruf then
+            liste[i] = q
+            return false
+        end
+    end
+    table.insert(liste, q)
+    return true
+end
+
+-- "Benötigt Schmiedekunst (50)" aus den Zeilen einer Beschreibung (Tooltip) lesen
+function Kat.Berufswert(daten)
+    for _, zeile in ipairs(type(daten) == "table" and daten.lines or {}) do
+        local text = zeile.leftText
+        if type(text) == "string" then
+            local beruf, wert = string.match(text, "^Benötigt (.-) %((%d+)%)")
+            if not beruf then
+                beruf, wert = string.match(text, "^Requires (.-) %((%d+)%)")
+            end
+            if beruf then
+                return beruf, tonumber(wert)
+            end
+        end
+    end
+    return nil
+end
+
+-- Beschreibung ueber die Schnittstelle "funktion(index)" holen, sonst ueber den Gegenstands-Link
+function Kat.Beschreibung(funktion, index, link)
+    if not C_TooltipInfo then
+        return nil
+    end
+    if C_TooltipInfo[funktion] then
+        local ok, daten = pcall(C_TooltipInfo[funktion], index)
+        if ok and daten then
+            return daten
+        end
+    end
+    if link and C_TooltipInfo.GetHyperlink then
+        local ok, daten = pcall(C_TooltipInfo.GetHyperlink, link)
+        if ok then
+            return daten
+        end
+    end
+    return nil
+end
+
+-- Rezept-Gegenstand erkennen ("Pläne: Kupferkettengürtel"). Liefert Rezeptname, Beruf, Fertigkeit.
+function Kat.RezeptGegenstand(name, link, daten)
+    local rezept = type(name) == "string" and string.match(name, "^[^:]+:%s*(.+)$")
+    if not rezept then
+        return nil
+    end
+    local info = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+    if link and info then
+        local klasse = select(6, info(link))
+        if klasse and klasse ~= 9 then -- 9 = Rezept
+            return nil
+        end
+    end
+    local beruf, wert = Kat.Berufswert(daten)
+    if not beruf then
+        return nil
+    end
+    return rezept, beruf, wert
+end
+
+function Kat.LehrerLesen()
+    if not GetNumTrainerServices or not GetTrainerServiceInfo then
+        return
+    end
+    local lehrer = UnitName("npc") or UnitName("target")
+    if not lehrer then
+        return
+    end
+    local zone, x, y = Ort()
+    local fraktion = NpcFraktion()
+    local neu = 0
+    for i = 1, (GetNumTrainerServices() or 0) do
+        -- je nach Spielversion steht die Art ("header", "available" ...) an 2. oder 3. Stelle
+        local name, a, b = GetTrainerServiceInfo(i)
+        local art = K.LEHRER_ARTEN[a] and a or b
+        if name and art ~= "header" then
+            local beruf, wert
+            if GetTrainerServiceSkillReq then
+                beruf, wert = GetTrainerServiceSkillReq(i)
+            end
+            if not beruf or beruf == "" or not wert then
+                beruf, wert = Kat.Berufswert(Kat.Beschreibung("GetTrainerService", i))
+            end
+            -- ohne Berufswert ist es eine Klassen- oder Waffenfaehigkeit: gehoert nicht hierher
+            if beruf and beruf ~= "" and wert then
+                local kosten = GetTrainerServiceCost and GetTrainerServiceCost(i) or nil
+                if Kat.QuelleMerken(name, { art = "Lehrer", wer = lehrer, zone = zone, x = x, y = y,
+                    kosten = kosten, skill = wert, beruf = beruf, fraktion = fraktion }) then
+                    neu = neu + 1
+                end
+            end
+        end
+    end
+    if neu > 0 then
+        Melden(lehrer .. ": " .. neu .. (neu == 1 and " Rezept" or " Rezepte") .. " zum Lernen gemerkt.")
+    end
+end
+
+function Kat.HaendlerRezepteLesen()
+    if not GetMerchantNumItems or not GetMerchantItemLink then
+        return
+    end
+    local haendler = UnitName("npc") or UnitName("target")
+    if not haendler then
+        return
+    end
+    local zone, x, y = Ort()
+    local fraktion = NpcFraktion()
+    local neu = 0
+    for i = 1, (GetMerchantNumItems() or 0) do
+        local name, preis
+        if C_MerchantFrame and C_MerchantFrame.GetItemInfo then
+            local ok, info = pcall(C_MerchantFrame.GetItemInfo, i)
+            if ok and type(info) == "table" then
+                name, preis = info.name, info.price
+            end
+        end
+        if not name and GetMerchantItemInfo then
+            local n, _, p = GetMerchantItemInfo(i)
+            name, preis = n, p
+        end
+        local link = GetMerchantItemLink(i)
+        local rezept, beruf, wert = Kat.RezeptGegenstand(name, link, Kat.Beschreibung("GetMerchantItem", i, link))
+        if rezept and Kat.QuelleMerken(rezept, { art = "Händler", wer = haendler, zone = zone, x = x, y = y,
+            kosten = preis, skill = wert, beruf = beruf, fraktion = fraktion }) then
+            neu = neu + 1
+        end
+    end
+    if neu > 0 then
+        Melden(haendler .. ": " .. neu .. (neu == 1 and " Rezept" or " Rezepte") .. " zum Kaufen gemerkt.")
+    end
+end
+
+-- Von wem stammt die Beute in diesem Platz? Liest nur Name und Kennung.
+function Kat.BeuteHerkunft(platz)
+    local guid = GetLootSourceInfo and GetLootSourceInfo(platz)
+    local art = type(guid) == "string" and string.match(guid, "^(%a+)") or nil
+    if art == "GameObject" then
+        return "Behälter"
+    elseif art == "Item" then
+        return "Gegenstand (geöffnet)"
+    end
+    for _, einheit in ipairs({ "target", "mouseover" }) do
+        if guid and UnitGUID and UnitGUID(einheit) == guid then
+            return UnitName(einheit)
+        end
+    end
+    if UnitExists and UnitExists("target") and UnitIsDead and UnitIsDead("target") then
+        return UnitName("target")
+    end
+    return "Unbekannter Gegner"
+end
+
+function Kat.BeuteLesen()
+    if not GetNumLootItems or not GetLootSlotLink then
+        return
+    end
+    local zone, x, y = Ort()
+    for platz = 1, (GetNumLootItems() or 0) do
+        local link = GetLootSlotLink(platz)
+        if link then
+            local _, name = GetLootSlotInfo(platz)
+            name = name or string.match(link, "%[(.-)%]")
+            local rezept, beruf, wert = Kat.RezeptGegenstand(name, link, Kat.Beschreibung("GetLootItem", platz, link))
+            if rezept then
+                local wer = Kat.BeuteHerkunft(platz)
+                -- Beute gibt es fuer beide Seiten: darum ohne Fraktion
+                if Kat.QuelleMerken(rezept, { art = "Beute", wer = wer, zone = zone, x = x, y = y,
+                    skill = wert, beruf = beruf }) then
+                    Melden("Rezept gefunden: " .. name .. " von " .. tostring(wer) .. ", gemerkt.")
+                end
+            end
+        end
+    end
+end
+
+function Kat.QuellenZahl()
+    local zahl = 0
+    for _ in pairs(Daten().quellen) do
+        zahl = zahl + 1
+    end
+    return zahl
+end
+
+-- Fuer die Ereignisse: Fehler beim Lesen stoeren nie das Spiel, sie landen in der Diagnose
+function Kat.QuellenLesen(lesen)
+    local ok, fehler = pcall(lesen)
+    if not ok then
+        B.Diagnose("fehler", "Quellen", fehler)
+    end
 end
 
 -- Namen der gelernten Rezepte eines Berufs (Rezeptname UND Name des Ergebnisses,
@@ -1004,10 +1219,7 @@ local function GelernteNamen(beruf, rezepte)
 end
 
 local function GraueRezepte(beruf, fraktion, gelernt)
-    local fd = Reisefuehrer()
-    if not fd then
-        return {}
-    end
+    local fd = Reisefuehrer() or {} -- der Reisefuehrer ist nur eine zusaetzliche Quelle
     local nachName, liste = {}, {}
     local function eintrag(name)
         local e = nachName[name]
@@ -1018,12 +1230,36 @@ local function GraueRezepte(beruf, fraktion, gelernt)
         end
         return e
     end
+    -- dieselbe Quelle kann aus beiden Sammlungen kommen, sie zaehlt nur einmal
+    local function quelleDazu(name, q)
+        local e = eintrag(name)
+        for _, alt in ipairs(e.quellen) do
+            if alt.art == q.art and alt.wer == q.wer and alt.zone == q.zone then
+                return
+            end
+        end
+        table.insert(e.quellen, q)
+    end
+    local function sichtbar(f)
+        return not f or f == "Neutral" or f == fraktion
+    end
+    for name, quellen in pairs(Daten().quellen) do
+        if not gelernt[name] then
+            for _, q in ipairs(quellen) do
+                if q.beruf == beruf and sichtbar(q.fraktion) then
+                    quelleDazu(name, {
+                        art = q.art, wer = q.wer, zone = q.zone, x = q.x, y = q.y,
+                        cost = q.kosten, skill = q.skill,
+                    })
+                end
+            end
+        end
+    end
     local katalog = fd.catalog and fd.catalog.recipes
     for _, e in pairs(type(katalog) == "table" and katalog or {}) do
         if type(e) == "table" and e.profession == beruf and e.name and not gelernt[e.name] then
-            local f = e.npcFaction
-            if not f or f == "Neutral" or f == fraktion then
-                table.insert(eintrag(e.name).quellen, {
+            if sichtbar(e.npcFaction) then
+                quelleDazu(e.name, {
                     art = e.sourceType, wer = e.sourceName, zone = e.zone, x = e.x, y = e.y,
                     cost = e.cost, skill = e.requiredSkill,
                 })
@@ -2168,7 +2404,7 @@ local function RezeptbuchZeigen(f, fraktion, rezepte, berufe)
         return
     end
 
-    -- Eintraege: gelernte (eigene Charaktere dieser Fraktion), dann graue aus dem Reiseführer
+    -- Eintraege: gelernte (eigene Charaktere dieser Fraktion), dann graue mit bekannter Quelle
     local suche = string.lower(L.suche:GetText() or "")
     local function passt(name)
         return suche == "" or string.find(string.lower(name or ""), suche, 1, true) ~= nil
@@ -2181,23 +2417,13 @@ local function RezeptbuchZeigen(f, fraktion, rezepte, berufe)
         end
     end
     table.sort(gelernt, function(a, b) return (a.r.name or "") < (b.r.name or "") end)
-    local fd = Reisefuehrer()
-    if fd then
-        for _, e in ipairs(GraueRezepte(beruf, fraktion, GelernteNamen(beruf, rezepte))) do
-            -- ab 1.1.5 nur, wo bekannt ist, wo man es lernt (Lehrer, Händler, später Beute) - nichts vorwegnehmen
-            if passt(e.name) and #e.quellen > 0 then
-                table.insert(grau, e)
-            end
+    for _, e in ipairs(GraueRezepte(beruf, fraktion, GelernteNamen(beruf, rezepte))) do
+        -- ab 1.1.5 nur, wo bekannt ist, wo man es lernt (Lehrer, Händler, Beute) - nichts vorwegnehmen
+        if passt(e.name) and #e.quellen > 0 then
+            table.insert(grau, e)
         end
-        -- zuerst die, bei denen bekannt ist, wo man sie lernt
-        table.sort(grau, function(a, b)
-            local qa, qb = #a.quellen > 0, #b.quellen > 0
-            if qa ~= qb then
-                return qa
-            end
-            return a.name < b.name
-        end)
     end
+    table.sort(grau, function(a, b) return a.name < b.name end)
 
     local yy = 0
     local function kopf(text, rechts, offen, hell, umschalten)
@@ -2326,9 +2552,9 @@ local function RezeptbuchZeigen(f, fraktion, rezepte, berufe)
             })
         end)
     end
-    if fd and #grau > 0 then
+    if #grau > 0 then
         local grauOffen = d.settings.grauOffen == true or suche ~= ""
-        kopf("Noch nicht gelernt", #grau .. ", aus dem Reiseführer", grauOffen, false, function()
+        kopf("Noch nicht gelernt", #grau .. ", Quelle gesehen", grauOffen, false, function()
             local s = Daten().settings
             s.grauOffen = not (s.grauOffen == true)
         end)
@@ -2408,7 +2634,7 @@ local function AuftragZeigen(f, fraktion, rezepte)
             table.insert(zeilen, QuelleZeile(q))
         end
         if #zeilen == 0 then
-            table.insert(zeilen, "Noch unbekannt. Der Reiseführer merkt sich den Ort, sobald du den Lehrer oder Händler ansprichst.")
+            table.insert(zeilen, "Noch unbekannt. Guild ERP merkt sich den Ort, sobald du den Lehrer oder Händler ansprichst.")
         end
         R.lernen.text:SetText(table.concat(zeilen, "\n"))
         R.lernen:SetHeight(12 + 16 + 10 + (R.lernen.text:GetStringHeight() or 20) + 14)
@@ -8642,7 +8868,8 @@ local function StandZeigen()
     print("Berufefenster öffnen: " .. tostring(d.diagnostics.berufefenster or "noch nicht benutzt"))
     print("Zutaten gelesen über: " .. tostring(d.diagnostics.zutatenWeg or "noch nichts")
         .. ", bekannte Gegenstandsnamen: " .. namenZahl
-        .. ", Reiseführer: " .. (Reisefuehrer() and "gefunden" or "nicht installiert"))
+        .. ", Rezepte mit gemerkter Quelle: " .. Kat.QuellenZahl()
+        .. ", Reiseführer (optional): " .. (Reisefuehrer() and "gefunden" or "nicht installiert"))
 end
 
 -- ---------------------------------------------------------------------------
@@ -8673,7 +8900,8 @@ pcall(frame.RegisterEvent, frame, "MERCHANT_SHOW")
 pcall(frame.RegisterEvent, frame, "CHAT_MSG_ADDON")
 pcall(frame.RegisterEvent, frame, "GROUP_ROSTER_UPDATE")
 pcall(frame.RegisterEvent, frame, "GET_ITEM_INFO_RECEIVED")
-for _, e in ipairs({ "TRADE_SHOW", "MAIL_SHOW", "MAIL_INBOX_UPDATE", "MAIL_CLOSED", "GUILD_ROSTER_UPDATE" }) do
+for _, e in ipairs({ "TRADE_SHOW", "MAIL_SHOW", "MAIL_INBOX_UPDATE", "MAIL_CLOSED", "GUILD_ROSTER_UPDATE",
+    "TRAINER_SHOW", "TRAINER_UPDATE", "LOOT_OPENED" }) do
     pcall(frame.RegisterEvent, frame, e)
 end
 for _, e in ipairs({ "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "COMMODITY_SEARCH_RESULTS_UPDATED",
@@ -8765,6 +8993,24 @@ frame:SetScript("OnEvent", function(self, event, ...)
         end
     elseif event == "MERCHANT_SHOW" then
         C_Timer.After(0.5, HaendlerLesen)
+        C_Timer.After(0.5, function()
+            Kat.QuellenLesen(Kat.HaendlerRezepteLesen)
+            FensterSpaeterAktualisieren()
+        end)
+    elseif event == "TRAINER_SHOW" or event == "TRAINER_UPDATE" then
+        -- die Liste kann erst nach dem Oeffnen vollstaendig sein: pro Fenster einmal nachlesen
+        if event == "TRAINER_SHOW" or Kat.lehrerNachlesen then
+            Kat.lehrerNachlesen = event == "TRAINER_SHOW"
+            C_Timer.After(event == "TRAINER_SHOW" and 0.5 or 1, function()
+                Kat.QuellenLesen(Kat.LehrerLesen)
+                FensterSpaeterAktualisieren()
+            end)
+        end
+    elseif event == "LOOT_OPENED" then
+        C_Timer.After(0.1, function()
+            Kat.QuellenLesen(Kat.BeuteLesen)
+            FensterSpaeterAktualisieren()
+        end)
     elseif event == "GET_ITEM_INFO_RECEIVED" then
         local itemID = ...
         if itemID then
