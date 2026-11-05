@@ -1,6 +1,6 @@
 # Guild ERP – Übergabe für die „Polishing“-Sitzung in Claude Code
 
-Stand: 5.11.2026 · Version **1.3 (Beta)** · erstellt aus dem bisherigen Claude-Chat „Guild ERP“.
+Stand: 5.11.2026 · Version **1.4.1 (Beta)** · erstellt aus dem bisherigen Claude-Chat „Guild ERP“.
 
 ## 1. Ziel der Sitzung
 Guild ERP ist funktional fertig („Funktional bin ich hoch zufrieden“). Jetzt, wo WoW Forever erschienen ist (4.11.2026), soll es **professionalisiert** und den **Gildenfreunden** zur Verfügung gestellt werden:
@@ -47,7 +47,7 @@ Details, Regeln, Entscheidungen und Versionsgeschichte: `docs/KONZEPT.md`.
 12. **README für Gildenfreunde** (deutsch, ohne Fachbegriffe): Installation, erste Schritte, Guild-Found, Regeln, Datenschutz (teilt Rezepte, Bestellungen, Fundorte und Auktionshaus-Preise, nur mit Spielern, die Guild ERP haben; Teilen der Fundorte und Preise abschaltbar).
 
 ## 5. Noch nicht im Spiel geprüft
-- Seit 1.4 (am 5.11.2026 freigegeben): Lehrer sammeln ist im Spiel bestätigt. Noch offen: Rezepte beim Händler und als Beute, Teilen von Fundorten und Preisen zwischen zwei echten Spielern, Teilen in einer großen Gilde, Fehlerschutz bei einem echten Fehler, Erkennung weiterer Berufsstufen (bisher nur „Kochgeselle“ gesehen).
+- Seit 1.4 (am 5.11.2026 freigegeben, 1.4.1 am selben Tag): Lehrer sammeln, Werkstatt je Charakter und Symbole sind im Spiel bestätigt. Noch offen: Rezepte beim Händler und als Beute, Teilen von Fundorten und Preisen zwischen zwei echten Spielern, Teilen in einer großen Gilde, Fehlerschutz bei einem echten Fehler, Erkennung weiterer Berufsstufen (bisher nur „Kochgeselle“ gesehen).
 - Auktionshaus-Preise (seit 0.8) – zuletzt im Spiel gesehen, aber nicht systematisch getestet.
 - Guild-Found (1.3): Kommt das Flüstern an (Vor- + Nachname)? Klappt `CancelTrade` ohne Fehlermeldung? Post-Liste neben dem Briefkasten.
 - Spiel-Look in allen Ansichten, Reiter-Reihenfolge, Planauftrag-Bereich anderer Charaktere (1.2), Fraktionstrennung (1.2.1).
