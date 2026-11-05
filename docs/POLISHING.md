@@ -9,7 +9,7 @@ Guild ERP ist funktional fertig („Funktional bin ich hoch zufrieden“). Jetzt
 3. Feinschliff: Code-Struktur, Robustheit, Optik, Texte, Tests.
 
 ## 2. Was Guild ERP kann (Kurzfassung)
-- **Werkstatt**: Rezeptbuch aller eigenen Charaktere (nach den Gruppen des Spiels, aufklappbar), Wunschrezept → mehrstufige Stückliste mit Ampel (Tasche, Bank, andere Charaktere, Händler, herstellbar, fehlt), Unter-Zutaten, Knopf „Im Berufefenster öffnen“.
+- **Werkstatt**: Rezeptbuch des gerade gespielten Charakters (seit 1.4.1, nach den Gruppen des Spiels, aufklappbar), Wunschrezept → mehrstufige Stückliste mit Ampel (Tasche, Bank, andere Charaktere, Händler, herstellbar, fehlt), Unter-Zutaten, Knopf „Im Berufefenster öffnen“.
 - **Planaufträge (PLAUF)**: Vormerken, Zusagen anderer zählen blau mit, Auftragsnetz (Kacheln mit Linien), eigene oben, andere Charaktere zuklappbar.
 - **Bestellungen**: Bestellschein an Gruppe/Gilde oder eine Person, Zusagen mit Lieferweg, Stornieren mit Abhängigkeiten, Tooltips.
 - **Katalog**: Wer kann was (eigene Twinks + Mitspieler über Abgleich), Zutaten-Baum, direkt bestellen.

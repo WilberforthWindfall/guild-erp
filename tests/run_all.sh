@@ -24,6 +24,7 @@ for s in sim14 sim16 sim17; do lauf $s "$G" "$SV" x; done
 for s in sim10 sim13 sim18 sim19 sim21 sim23 sim25; do lauf $s "$G" "$SV"; done
 for s in sim15 sim22; do lauf $s "$G" "$SV" "$G"; done
 lauf sim24 "$G"
+lauf sim26 "$G"
 lauf sim20 "$G" "$SV" Herr
 lauf sim20 "$G" "$SV" Barlor
 echo "--- veraltet (Testannahmen passen nicht mehr zu den Testdaten, nur zur Info):"

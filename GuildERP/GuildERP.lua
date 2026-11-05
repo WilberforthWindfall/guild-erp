@@ -1,4 +1,4 @@
--- Guild ERP 1.4 (Beta)
+-- Guild ERP 1.4.1 (Beta)
 -- Werkstatt: links das Rezeptbuch (Handwerk waehlen, suchen), rechts der Herstellauftrag mit
 -- mehrstufiger Stueckliste und Ampel, ob alles da ist.
 -- Liest ausschliesslich ueber die normale Add-on-Schnittstelle (nur lesend) und speichert
@@ -23,7 +23,7 @@
 local ADDON_TITEL = "|cffd4af37Guild ERP|r"
 local frame = CreateFrame("Frame")
 local K = {} -- Konstanten (spart Platz fuer lokale Namen)
-K.VERSION = "1.4"
+K.VERSION = "1.4.1"
 K.ICON_UNBEKANNT = "Interface\\Icons\\INV_Misc_QuestionMark"
 K.ICON_TITEL = "Interface\\Icons\\Trade_BlackSmithing"
 K.ICON_REZEPT = "Interface\\Icons\\INV_Scroll_03"
@@ -1283,6 +1283,35 @@ function Kat.BeuteLesen()
     end
 end
 
+-- Werkstatt (ab 1.4.1): nur was der gerade gespielte Charakter kann. Rezepte der anderen eigenen
+-- Charaktere bleiben fuer die Stueckliste nutzbar und werden fuer den Hinweis gemerkt.
+function Kat.WerkstattFiltern(rezepte, berufe)
+    local ich = UnitName("player")
+    local eigene = {}
+    Kat.andereRezepte = {}
+    for id, info in pairs(rezepte) do
+        local kann = false
+        for _, n in ipairs(info.wer) do
+            kann = kann or n == ich
+        end
+        if kann then
+            eigene[id] = { wer = { ich } }
+        else
+            Kat.andereRezepte[id] = info
+        end
+    end
+    for beruf, liste in pairs(berufe) do
+        local meine = {}
+        for _, e in ipairs(liste) do
+            if e.name == ich then
+                table.insert(meine, e)
+            end
+        end
+        berufe[beruf] = #meine > 0 and meine or nil
+    end
+    return eigene
+end
+
 -- Option "ungelernt": auch Berufe zeigen, in denen noch kein eigener Charakter etwas kann,
 -- aber schon eine Quelle gesehen wurde. Solche Berufe bekommen eine leere Namensliste.
 function Kat.BerufeErgaenzen(berufe, fraktion)
@@ -2535,8 +2564,9 @@ local function RezeptbuchZeigen(f, fraktion, rezepte, berufe)
     L.leer:Hide()
     L.fuss:SetText("Ein Klick auf ein Rezept zeigt rechts, was du dafür brauchst.")
     if not beruf then
-        L.leer:SetText("Öffne bei jedem deiner Charaktere einmal sein Berufefenster (z. B. Schmiedekunst, Bergbau). "
-            .. "Guild ERP merkt sich dann, welche Rezepte er kennt und welche Zutaten sie brauchen.")
+        L.leer:SetText("Öffne einmal das Berufefenster dieses Charakters (z. B. Schmiedekunst, Bergbau). "
+            .. "Guild ERP merkt sich dann, welche Rezepte er kennt und welche Zutaten sie brauchen. "
+            .. "Rezepte deiner anderen Charaktere findest du im Katalog.")
         L.leer:Show()
         L.inhalt:SetHeight(80)
         L.fuss:SetText("")
@@ -2787,7 +2817,16 @@ local function AuftragZeigen(f, fraktion, rezepte)
         end
         local info = type(wunsch) == "number" and rezepte[wunsch]
         local r = info and d.recipes[wunsch]
-        if not r then
+        local anderer = type(wunsch) == "number" and Kat.andereRezepte and Kat.andereRezepte[wunsch]
+        local anderesR = anderer and d.recipes[wunsch]
+        if anderesR then
+            -- z. B. aus einem Planauftrag hierher gesprungen: das kann nur ein anderer eigener Charakter
+            KarteSetzen(R.karte, ItemIcon(anderesR.itemID) or anderesR.icon, anderesR.name or "?", "9a9384",
+                "Das kann " .. table.concat(anderer.wer, ", ") .. ", nicht dieser Charakter. Mit diesem Charakter einloggen, um es herzustellen.")
+            P.KarteZeigen(R.karte)
+            R.auftrag:Hide()
+            R.karte:SetHeight(64)
+        elseif not r then
             KarteSetzen(R.karte, K.ICON_UNBEKANNT, "Noch kein Wunschrezept", "9a9384", "Wähle links im Rezeptbuch, was du herstellen willst.")
             P.KarteZeigen(R.karte)
             R.auftrag:Hide()
@@ -2808,7 +2847,8 @@ local function AuftragZeigen(f, fraktion, rezepte)
             R.auftrag.menge:SetText(menge)
             local plan = P.Plan(wunsch)
             if plan then
-                plan.menge, plan.wer = menge, wer
+                -- blosses Anschauen als anderer Charakter aendert nicht, wer den Plan herstellt
+                plan.menge, plan.wer = menge, plan.wer or wer
             end
             P.KarteZeigen(R.karte, wunsch, plan, menge, wer)
             B.planID = plan and plan.id or nil
@@ -2884,7 +2924,7 @@ local function AuftragZeigen(f, fraktion, rezepte)
     R.kopf:SetShown(zeigeListe)
     R.scroll:SetShown(zeigeListe)
     if not zeigeListe and not R.lernen:IsShown() and not (type(wunsch) == "number" and rezepte[wunsch]) then
-        R.leer:SetText(next(rezepte) and "Links siehst du alle Rezepte deiner Charaktere. Ein Klick auf eines zeigt hier, was du dafür brauchst und ob es da ist."
+        R.leer:SetText(next(rezepte) and "Links siehst du die Rezepte dieses Charakters. Ein Klick auf eines zeigt hier, was du dafür brauchst und ob es da ist."
             or "Öffne bei jedem deiner Charaktere einmal sein Berufefenster. Deine Taschen werden von selbst erfasst, die Bank, sobald du sie öffnest.")
         R.leer:Show()
     end
@@ -8453,7 +8493,7 @@ function Kat.FormZeigen(F, rid, e, zutaten)
     -- Hinweis: was mir an Zutaten noch fehlt
     local text
     if not einzeln then
-        text = "Das kann nur dein eigener Charakter. Herstellen geht über die Werkstatt."
+        text = "Das kann nur ein eigener Charakter. Mit ihm eingeloggt geht das Herstellen über die Werkstatt."
     elseif f.mats == "h" then
         text = (f.an == "" and "Der Hersteller" or B.Anzeige(f.an)) .. " besorgt die Zutaten."
     elseif zutaten and #zutaten > 0 then
@@ -9172,6 +9212,7 @@ FensterAktualisieren = function()
     if werk then
         local fraktion = SpielerFraktion()
         local _, rezepte, berufe = HerstellerSammeln(fraktion)
+        rezepte = Kat.WerkstattFiltern(rezepte, berufe)
         Kat.BerufeErgaenzen(berufe, fraktion)
         RezeptbuchZeigen(f, fraktion, rezepte, berufe)
         AuftragZeigen(f, fraktion, rezepte)

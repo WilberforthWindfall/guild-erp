@@ -1,4 +1,4 @@
-Guild ERP 1.4 (Beta)
+Guild ERP 1.4.1 (Beta)
 ====================
 
 Was macht das Add-on?
@@ -24,12 +24,12 @@ So geht's
 3. Händler ansprechen genügt, damit Guild ERP sich merkt, wo es Zutaten zu kaufen gibt.
 4. /gerp tippen: Die Werkstatt öffnet sich.
    - Links oben auf das Handwerk klicken: Eine Liste klappt auf (Haupt- und
-     Nebenberufe). Es erscheinen Handwerke, die einer deiner Charaktere kann, und solche,
+     Nebenberufe). Es erscheinen Handwerke, die dieser Charakter kann, und solche,
      von denen dir schon Rezepte bekannt sind (abschaltbar in den Optionen).
      Darunter kannst du in diesem Handwerk nach Rezepten suchen.
    - Ein Klick auf ein Rezept macht es zum Wunschrezept (rechts).
-   - "Wer stellt her?": Vorgewählt ist der Charakter, mit dem du gerade spielst.
-     Mit einem Klick wählst du einen anderen, der das Rezept auch kennt.
+   - "Wer stellt her?": Das ist der Charakter, mit dem du gerade spielst. Was deine
+     anderen Charaktere können, findest du im Katalog.
    - Mit -5, -, + und +5 die Menge ändern. Wählst du ein anderes Rezept,
      springt die Menge wieder auf 1.
    - Liegt alles in deiner Tasche, leuchtet unten ein grüner Kasten mit dem Knopf
@@ -204,3 +204,6 @@ Neu in 1.4 – Guild ERP braucht den Reiseführer nicht mehr:
 - Neue Option "Noch nicht gelernte Berufe zeigen" (Standard: an): Auch Berufe, die du noch nicht hast, stehen in der Auswahl, sobald du ein Rezept dafür gesehen hast. In der Liste steht bei jedem Rezept, wo du es gesehen hast.
 - Teilen: Fundorte von Rezepten und deine gelesenen Auktionshaus-Preise gehen an Mitspieler deiner Fraktion in Gruppe oder Gilde, die Guild ERP ebenfalls haben. Bei Preisen gewinnt der neuere. In der Preisliste steht, wie alt ein Preis ist und von wem er kommt. Abschaltbar in den Optionen: "Fundorte und Preise teilen".
 - Fehlerschutz: Tritt in Guild ERP ein Fehler auf, erscheint kein Fehlerfenster mehr. Das Spiel läuft normal weiter, im Chat kommt einmal ein kurzer Hinweis, und /gerp info zeigt die Details. Bitte sag dann Bescheid.
+
+Neu in 1.4.1:
+- Die Werkstatt zeigt nur noch, was der gerade gespielte Charakter kann. Was deine anderen Charaktere können, steht im Katalog. Zutaten bei deinen anderen Charakteren zählen in der Stückliste weiter mit.

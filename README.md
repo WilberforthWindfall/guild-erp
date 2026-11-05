@@ -6,7 +6,7 @@ Ein kostenloses Add-on für **World of Warcraft: Forever**, das dir beim Herstel
 
 ## Was es kann
 
-- **Werkstatt:** Wähle ein Rezept. Eine Farbe zeigt dir bei jeder Zutat, ob sie in deiner Tasche liegt, auf der Bank, bei einem anderen deiner Charaktere, oder ob sie noch fehlt.
+- **Werkstatt:** Wähle ein Rezept des Charakters, mit dem du gerade spielst. Eine Farbe zeigt dir bei jeder Zutat, ob sie in deiner Tasche liegt, auf der Bank, bei einem anderen deiner Charaktere, oder ob sie noch fehlt.
 - **Noch nicht gelernt:** Guild ERP merkt sich, wo du Rezepte gesehen hast: beim Lehrer, beim Händler oder als Beute. Mit Ort und Preis.
 - **Planaufträge:** Merk dir, was du herstellen willst. Sagt dir jemand Zutaten zu, zählt das mit.
 - **Bestellungen:** Bitte deine Gruppe oder Gilde um Zutaten oder fertige Sachen. Das ist nur eine Notiz. Übergeben wird ganz normal im Spiel, per Handel, Post oder Gildenbank.

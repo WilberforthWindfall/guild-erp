@@ -2,7 +2,7 @@
 ## Title: Guild ERP
 ## Notes: Werkstatt mit Stückliste und Ampel, Bestellungen, Planaufträge und Auktionshaus-Preise, Katalog
 ## Author: Barlor Rostbart
-## Version: 1.4 (Beta)
+## Version: 1.4.1 (Beta)
 ## OptionalDeps: ForeverDashboard
 ## SavedVariables: GuildERPData
 

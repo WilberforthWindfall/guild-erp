@@ -25,3 +25,4 @@
 | sim23 | Standalone: Lehrer, Händler und Beute ohne Reiseführer sammeln und anzeigen |
 | sim24 | Teilen: Fundorte und Preise, neuerer Preis gewinnt, Fraktionen getrennt, Option aus |
 | sim25 | Fehlerschutz: Fehler sammeln statt Fehlerfenster |
+| sim26 | Werkstatt zeigt nur den gerade gespielten Charakter |
