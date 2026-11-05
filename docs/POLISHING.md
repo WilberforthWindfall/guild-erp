@@ -47,6 +47,7 @@ Details, Regeln, Entscheidungen und Versionsgeschichte: `docs/KONZEPT.md`.
 12. **README für Gildenfreunde** (deutsch, ohne Fachbegriffe): Installation, erste Schritte, Guild-Found, Regeln, Datenschutz (teilt Rezepte, Bestellungen, Fundorte und Auktionshaus-Preise, nur mit Spielern, die Guild ERP haben; Teilen der Fundorte und Preise abschaltbar).
 
 ## 5. Noch nicht im Spiel geprüft
+- Seit 1.4 (am 5.11.2026 freigegeben): Lehrer sammeln ist im Spiel bestätigt. Noch offen: Rezepte beim Händler und als Beute, Teilen von Fundorten und Preisen zwischen zwei echten Spielern, Teilen in einer großen Gilde, Fehlerschutz bei einem echten Fehler, Erkennung weiterer Berufsstufen (bisher nur „Kochgeselle“ gesehen).
 - Auktionshaus-Preise (seit 0.8) – zuletzt im Spiel gesehen, aber nicht systematisch getestet.
 - Guild-Found (1.3): Kommt das Flüstern an (Vor- + Nachname)? Klappt `CancelTrade` ohne Fehlermeldung? Post-Liste neben dem Briefkasten.
 - Spiel-Look in allen Ansichten, Reiter-Reihenfolge, Planauftrag-Bereich anderer Charaktere (1.2), Fraktionstrennung (1.2.1).
