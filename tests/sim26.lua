@@ -72,16 +72,54 @@ for _, z in ipairs(f.rechts.zeilen) do
 end
 assert(gefunden or f.rechts.bereit.shown, "Stueckliste fehlt")
 
--- Sprung aus einem Planauftrag von Hilda: verstaendlicher Hinweis
+-- Altes Wunschrezept von Hilda (Wunsch gilt fuer alle Charaktere): bleibt still, kein Hinweis
 d.settings.wunsch = 2
 offnen()
-assert(string.find(f.rechts.karte.name.text, "Verkohltes Wolfsfleisch", 1, true), "Rezeptname fehlt")
+assert(string.find(f.rechts.karte.name.text, "Noch kein Wunschrezept", 1, true), "altes Wunschrezept: " .. f.rechts.karte.name.text)
+assert(d.settings.wunsch == 2, "Hildas Wunschrezept soll erhalten bleiben")
+
+-- Sprung aus einem Planauftrag von Hilda: verstaendlicher Hinweis
+d.settings.wunsch = nil
+d.settings.ansicht = "plan"
+offnen()
+-- Plaene anderer Charaktere sind zugeklappt: Bereich oeffnen
+for _, k in ipairs(f.plan.koepfe or {}) do
+    if k.benutzt and k.scripts.OnClick then Click(k); RunTimers() end
+end
+for i = 1, #f.plan.karten do
+    local k = f.plan.karten[i]
+    if d.settings.wunsch ~= 2 and k.benutzt and k.werkstatt.scripts.OnClick then
+        Click(k.werkstatt); RunTimers()
+        if d.settings.wunsch ~= 2 then d.settings.ansicht = "plan"; offnen() end
+    end
+end
+assert(d.settings.wunsch == 2, "Sprung aus dem Planauftrag hat nicht geklappt")
+assert(string.find(f.rechts.karte.name.text, "Verkohltes Wolfsfleisch", 1, true), "Rezeptname fehlt: " .. f.rechts.karte.name.text)
 assert(string.find(f.rechts.karte.unter.text, "Das kann Hilda", 1, true), "Hinweis fehlt: " .. f.rechts.karte.unter.text)
 assert(not f.rechts.auftrag.shown, "kein Herstellauftrag fuer fremden Charakter")
 
--- Noch nicht gelernt: mit Quelle erscheint Kochkunst als Beruf (Option), und Hildas Rezept ist fuer Zwerg ungelernt
-d.settings.wunsch = nil
+-- Standard: nur Berufe, die dieser Charakter hat, auch wenn Quellen bekannt sind (so vom Nutzer gewuenscht)
+d.settings.ansicht = nil
+d.settings.wunsch = "g:Kochkunst:Verkohltes Wolfsfleisch"
 d.quellen = { ["Verkohltes Wolfsfleisch"] = { { art = "Lehrer", wer = "Gremlock", zone = "Dun Morogh", beruf = "Kochkunst", fraktion = "Alliance", at = 1 } } }
+d.settings.beruf = "Kochkunst"
+offnen()
+assert(L.handwerk.text.text == "Schmiedekunst", "Kochkunst darf nicht erscheinen: " .. L.handwerk.text.text)
+assert(d.settings.wunsch == nil, "graues Wunschrezept aus fremdem Beruf muss weg")
+
+-- Charakter ganz ohne Beruf: keine Berufe, keine Rezepte
+local schmied = d.characters["Forever-Zwerg"].recipes
+d.characters["Forever-Zwerg"].recipes = {}
+offnen()
+assert(string.find(L.handwerk.text.text, "Noch kein Handwerk bekannt", 1, true), "ohne Beruf: " .. L.handwerk.text.text)
+assert(rezepte() == "", "ohne Beruf keine Rezepte: " .. rezepte())
+assert(kopfZahl("Noch nicht gelernt") == nil, "ohne Beruf kein Bereich Noch nicht gelernt")
+d.characters["Forever-Zwerg"].recipes = schmied
+
+-- Option an: mit Quelle erscheint Kochkunst als Beruf, und Hildas Rezept ist fuer Zwerg ungelernt
+d.settings.optionen = d.settings.optionen or {}
+d.settings.optionen.ungelernt = true
+d.settings.wunsch = nil
 d.settings.beruf = "Kochkunst"
 offnen()
 assert(L.handwerk.text.text == "Kochkunst", "Option an: Beruf mit Quelle muss erscheinen")

@@ -141,13 +141,15 @@ for _, z in ipairs(f.links.zeilen) do
 end
 assert(fundort, "Fundort fehlt in der Liste")
 
--- Beruf ohne Gelerntes: nur Quellen bekannt. Option an (Standard) zeigt ihn, Option aus nicht.
+-- Beruf ohne Gelerntes: nur Quellen bekannt. Option an zeigt ihn, Option aus (Standard) nicht.
 d.quellen["Testrezept Horde"] = nil
 d.settings.wunsch = nil
 d.settings.beruf = "Lederverarbeitung"
 for _, c in pairs(d.characters) do if c.recipes then c.recipes["Lederverarbeitung"] = nil end end
 d.quellen["Nur gesehen"] = { { art = "Beute", wer = "Kobold", zone = "Elwynn", beruf = "Lederverarbeitung" } }
 GuildERPData.settings.grauOffen = false
+d.settings.optionen = d.settings.optionen or {}
+d.settings.optionen.ungelernt = true
 local function kopfRechts(titel)
     for _, k in ipairs(f.links.koepfe) do
         if k.benutzt and string.find(k.text.text, titel, 1, true) then return k.rechts.text end
@@ -171,7 +173,7 @@ assert(f.links.handwerk.text.text ~= "Lederverarbeitung", "Option aus: Beruf dar
 assert(d.quellen["Nur gesehen"], "Option aus: gemerkte Quelle muss erhalten bleiben")
 
 -- ganz neuer Spieler: Option an, noch nie ein Beruf. Gelernte Berufe gehen sonst vor.
-d.settings.optionen.ungelernt = nil
+d.settings.optionen.ungelernt = true
 d.settings.beruf = nil
 SlashCmdList.GUILDERP(""); SlashCmdList.GUILDERP(""); RunTimers()
 assert(f.links.handwerk.text.text ~= "Lederverarbeitung", "gelernter Beruf muss vorgehen: " .. f.links.handwerk.text.text)

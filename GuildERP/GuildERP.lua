@@ -2817,7 +2817,8 @@ local function AuftragZeigen(f, fraktion, rezepte)
         end
         local info = type(wunsch) == "number" and rezepte[wunsch]
         local r = info and d.recipes[wunsch]
-        local anderer = type(wunsch) == "number" and Kat.andereRezepte and Kat.andereRezepte[wunsch]
+        -- nur nach einem Sprung aus einem Planauftrag; ein altes Wunschrezept eines anderen Charakters bleibt still
+        local anderer = type(wunsch) == "number" and Kat.planSprung == wunsch and Kat.andereRezepte and Kat.andereRezepte[wunsch]
         local anderesR = anderer and d.recipes[wunsch]
         if anderesR then
             -- z. B. aus einem Planauftrag hierher gesprungen: das kann nur ein anderer eigener Charakter
@@ -5268,6 +5269,7 @@ function P.AnsichtZeigen(f)
         k.werkstatt:SetScript("OnClick", function()
             local s = Daten().settings
             s.wunsch, s.menge, s.ansicht = rid, plan.menge or 1, "werk"
+            Kat.planSprung = rid
             if plan.wer then
                 wahlHersteller[rid] = plan.wer
             end
@@ -5587,6 +5589,7 @@ function P.NetzZeigen()
     n.werkstatt:SetScript("OnClick", function()
         local s = Daten().settings
         s.wunsch, s.menge, s.ansicht = rid, menge, "werk"
+        Kat.planSprung = rid
         if plan.wer then
             wahlHersteller[rid] = plan.wer
         end
@@ -8766,7 +8769,7 @@ end
 -- ---------------------------------------------------------------------------
 -- Optionen und Minimap-Knopf (Version 1.1)
 -- ---------------------------------------------------------------------------
-O.STANDARD = { gilde = false, look = "erp", hinweis = "knopf", ton = true, chat = true, minimap = true, ah = "auto", groesse = 100, winkel = 200, ungelernt = true, teilen = true }
+O.STANDARD = { gilde = false, look = "erp", hinweis = "knopf", ton = true, chat = true, minimap = true, ah = "auto", groesse = 100, winkel = 200, ungelernt = false, teilen = true }
 
 function O.Wert(name)
     local s = Daten().settings
@@ -9214,6 +9217,11 @@ FensterAktualisieren = function()
         local _, rezepte, berufe = HerstellerSammeln(fraktion)
         rezepte = Kat.WerkstattFiltern(rezepte, berufe)
         Kat.BerufeErgaenzen(berufe, fraktion)
+        -- ein graues Wunschrezept aus einem Beruf, der hier nicht (mehr) zur Auswahl steht, nicht weiter zeigen
+        local grauerBeruf = type(Daten().settings.wunsch) == "string" and string.match(Daten().settings.wunsch, "^g:([^:]+):")
+        if grauerBeruf and not berufe[grauerBeruf] then
+            Daten().settings.wunsch = nil
+        end
         RezeptbuchZeigen(f, fraktion, rezepte, berufe)
         AuftragZeigen(f, fraktion, rezepte)
     elseif ansicht == "plan" then
