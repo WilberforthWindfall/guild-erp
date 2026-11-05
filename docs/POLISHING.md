@@ -44,7 +44,7 @@ Details, Regeln, Entscheidungen und Versionsgeschichte: `docs/KONZEPT.md`.
 9. **Tests automatisieren**: `tests/run_all.sh` in GitHub Actions (Lua 5.1), dazu `luacheck` mit `.luacheckrc` (WoW-Globale). Veraltete Sims (sim7, sim11, sim12, sim10v) an die Testdaten anpassen oder entfernen.
 10. **Testdaten anonymisieren** (Charakternamen in `tests/fixtures/`), damit die Tests auch öffentlich laufen können – bis dahin bleiben sie in `.gitignore`.
 11. **Auslieferung**: GitHub-Release mit ZIP (`GuildERP/` als einziger Ordner); optional CurseForge/Wago über den BigWigs-Packager (`.pkgmeta`) – Entscheidung Nutzer.
-12. **README für Gildenfreunde** (deutsch, ohne Fachbegriffe): Installation, erste Schritte, Guild-Found, Regeln, Datenschutz („teilt nur Rezepte/Bestellungen, keine Preise“).
+12. **README für Gildenfreunde** (deutsch, ohne Fachbegriffe): Installation, erste Schritte, Guild-Found, Regeln, Datenschutz (teilt Rezepte, Bestellungen, Fundorte und Auktionshaus-Preise, nur mit Spielern, die Guild ERP haben; Teilen der Fundorte und Preise abschaltbar).
 
 ## 5. Noch nicht im Spiel geprüft
 - Auktionshaus-Preise (seit 0.8) – zuletzt im Spiel gesehen, aber nicht systematisch getestet.
@@ -56,7 +56,7 @@ Details, Regeln, Entscheidungen und Versionsgeschichte: `docs/KONZEPT.md`.
 - Wo die Gildenfreunde herunterladen: nur GitHub-Releases oder zusätzlich CurseForge/Wago.
 - Spiel-Look als Standard?
 - Nur Deutsch oder zusätzlich Englisch?
-- Soll Guild ERP Lehrer-/Händler-/Beute-Quellen mit der Gilde teilen?
+- ~~Quellen und Preise teilen?~~ Entschieden am 5.11.2026: ja, beides, nur zwischen Spielern mit Guild ERP, abschaltbar.
 
 ## 7. GitHub – Ablauf (übernimmt Claude Code)
 1. Nutzer meldet sich einmal bei GitHub an (`gh auth login` – Schritt für Schritt erklären) oder hat schon ein Konto.

@@ -111,7 +111,7 @@ for _, k in ipairs(f.links.koepfe) do
     if k.benutzt and string.find(k.text.text, "Noch nicht gelernt", 1, true) then kopf = k end
 end
 assert(kopf, "Bereich 'Noch nicht gelernt' fehlt ohne Reisefuehrer")
-assert(kopf.rechts.text == "4, Quelle gesehen", "Zahl falsch (Horde darf nicht mitzaehlen): " .. kopf.rechts.text)
+assert(kopf.rechts.text == "4, Quelle bekannt", "Zahl falsch (Horde darf nicht mitzaehlen): " .. kopf.rechts.text)
 local text = f.rechts.lernen.text.text
 assert(string.find(text, "Beute: Defias-Schmied", 1, true) and string.find(text, "ab Fertigkeit 125", 1, true),
     "Quelle wird rechts nicht gezeigt: " .. text)
@@ -124,7 +124,7 @@ d.settings.wunsch = nil
 SlashCmdList.GUILDERP(""); SlashCmdList.GUILDERP(""); RunTimers()
 for _, k in ipairs(f.links.koepfe) do
     if k.benutzt and string.find(k.text.text, "Noch nicht gelernt", 1, true) then
-        assert(k.rechts.text == "3, Quelle gesehen", "gelerntes Rezept steht noch da: " .. k.rechts.text)
+        assert(k.rechts.text == "3, Quelle bekannt", "gelerntes Rezept steht noch da: " .. k.rechts.text)
     end
 end
 -- Eintrag in der Liste nennt den Fundort
@@ -149,7 +149,7 @@ end
 SlashCmdList.GUILDERP(""); SlashCmdList.GUILDERP(""); RunTimers()
 assert(f.links.handwerk.text.text == "Lederverarbeitung", "Beruf ohne Gelerntes fehlt: " .. f.links.handwerk.text.text)
 assert(f.links.handwerk.rechts.text == "noch nicht gelernt", "Text rechts falsch: " .. f.links.handwerk.rechts.text)
-assert(kopfRechts("Noch nicht gelernt") == "1, Quelle gesehen", "Bereich muss bei so einem Beruf offen da sein")
+assert(kopfRechts("Noch nicht gelernt") == "1, Quelle bekannt", "Bereich muss bei so einem Beruf offen da sein")
 assert(kopfRechts("Gelernt") ~= "0", "leerer Kopf 'Gelernt' soll fehlen")
 local sichtbar = false
 for _, z in ipairs(f.links.zeilen) do

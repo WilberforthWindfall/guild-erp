@@ -8,7 +8,7 @@ Dauerhafte Hinweise für Claude Code in diesem Repository. Ausführliche Überga
 - Einzige Ausnahmen:
   1. Knopf „Im Berufefenster öffnen“ (öffnet, wählt Rezept, trägt Anzahl ein – **Herstellen klickt der Spieler**).
   2. Option **Guild-Found**: fremden Handel per `CancelTrade` schließen + **einmal** freundlich flüstern (max. 1×/5 Min. je Spieler, nie im Kampf).
-- Auktionshaus: nur suchen/lesen (gedrosselt), nie kaufen/bieten/einstellen. **Preise werden nicht geteilt.**
+- Auktionshaus: nur suchen/lesen (gedrosselt), nie kaufen/bieten/einstellen. Seit 1.4 (Entscheidung des Nutzers, 5.11.2026) werden gelesene Preise geteilt: nur zwischen Spielern mit Guild ERP, nur gleiche Fraktion, nur selbst gelesene, abschaltbar (Option `teilen`). Ein ausdrückliches Okay von Blizzard dazu liegt nicht vor.
 - Bestellungen/Planaufträge sind nur **Vermerke**. Guild ERP storniert nie etwas bei anderen, es sagt nur Bescheid.
 - Add-on-Nachrichten gedrosselt (1 Nachricht / 1,2 s, nichts im Kampf). Code offen, kostenlos.
 - Keine Blizzard-Grafiken außer denen aus dem Spielclient (Atlas-Namen, Texturpfade).
@@ -21,7 +21,7 @@ Dauerhafte Hinweise für Claude Code in diesem Repository. Ausführliche Überga
 - Bezeichner und Kommentare deutsch; Kommentare ohne Umlaute (ae/oe/ue), Texte für Spieler mit Umlauten (UTF-8).
 - Namen in WoW Forever: Vor- **und** Nachname; nur die Kombination ist eindeutig. `UnitName` liefert nur den Vornamen, der `CHAT_MSG_ADDON`-Absender den vollen Namen. Helfer: `B.Name`, `B.Vorname`, `B.Gleich`, `B.Ich`, `B.Anzeige`.
 - Gespeicherte Daten: `GuildERPData` (Aufbau in `docs/KONZEPT.md` → „Datenmodell“).
-- Abgleich-Protokoll: Präfix `GERP1`, Kanal PARTY/RAID bzw. GUILD (Guild-Found). Nachrichten `H~2`, `I`, `S~`, `Q~`, `K`, `B`, Teile `X~nr~teil~gesamt~inhalt`. Rückwärtsverträglich halten (alte Versionen ignorieren unbekannte Teile).
+- Abgleich-Protokoll: Präfix `GERP1`, Kanal PARTY/RAID bzw. GUILD (Guild-Found). Nachrichten `H~2`, `I`, `S~`, `Q~`, `K`, `B`, `T~`, `R~`, `Z`, `W`, Teile `X~nr~teil~gesamt~inhalt`. Rückwärtsverträglich halten (alte Versionen ignorieren unbekannte Teile).
 
 ## Testen
 - `tests/run_all.sh` (braucht `lua5.1`; ggf. `sudo apt install lua5.1`). Muss mit „Fehler: 0“ enden.

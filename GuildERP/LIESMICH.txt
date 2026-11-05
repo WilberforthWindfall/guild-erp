@@ -145,8 +145,9 @@ Neu in 1.1
 Noch nicht gelernte Rezepte
 Links unter "Gelernt" gibt es eine zweite Gruppe
 "Noch nicht gelernt". Ein Klick auf die Überschrift klappt sie auf. Ein Klick auf
-ein graues Rezept zeigt rechts, wo du es lernen kannst. Dort steht nur, was du selbst schon
-gesehen hast: bei einem Lehrer, einem Händler oder als Beute. Der Reiseführer ist nicht nötig.
+ein graues Rezept zeigt rechts, wo du es lernen kannst. Dort steht nur, was du selbst oder
+ein Mitspieler mit Guild ERP gesehen hat: bei einem Lehrer, einem Händler oder als Beute.
+Der Reiseführer ist nicht nötig.
 Ist er installiert, nutzt Guild ERP seine Angaben zusätzlich.
 
 Wichtig
@@ -198,5 +199,6 @@ Neu in 1.3 – Guild-Found (Optionen > Haken "Guild-Found", Standard: aus):
 Neu in 1.4 – Guild ERP braucht den Reiseführer nicht mehr:
 - "Noch nicht gelernt" füllt Guild ERP jetzt selbst: Sprich einen Lehrer oder Händler an, und es merkt sich, welche Rezepte es dort gibt, mit Ort, Preis und nötiger Fertigkeit. Es liest nur, gelernt oder gekauft wird nichts.
 - Lässt ein Gegner ein Rezept fallen, merkt sich Guild ERP auch das, sobald du die Beute öffnest.
-- Es erscheinen nur Rezepte, deren Quelle du schon gesehen hast. So wird nichts vorweggenommen.
+- Es erscheinen nur Rezepte, deren Quelle du oder ein Mitspieler mit Guild ERP schon gesehen habt.
 - Neue Option "Noch nicht gelernte Berufe zeigen" (Standard: an): Auch Berufe, die du noch nicht hast, stehen in der Auswahl, sobald du ein Rezept dafür gesehen hast. In der Liste steht bei jedem Rezept, wo du es gesehen hast.
+- Teilen: Fundorte von Rezepten und deine gelesenen Auktionshaus-Preise gehen an Mitspieler deiner Fraktion in Gruppe oder Gilde, die Guild ERP ebenfalls haben. Bei Preisen gewinnt der neuere. In der Preisliste steht, wie alt ein Preis ist und von wem er kommt. Abschaltbar in den Optionen: "Fundorte und Preise teilen".

@@ -23,3 +23,4 @@
 | sim21 | Allianz/Horde getrennt |
 | sim22 | Guild-Found: Gildenabgleich, Handel, Post |
 | sim23 | Standalone: Lehrer, Händler und Beute ohne Reiseführer sammeln und anzeigen |
+| sim24 | Teilen: Fundorte und Preise, neuerer Preis gewinnt, Fraktionen getrennt, Option aus |

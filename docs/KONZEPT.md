@@ -11,7 +11,7 @@ Stand 17.10. (Nutzer): „Funktional bin ich hoch zufrieden. Jetzt gehts um den 
 - Grundregeln: nur offizielle Add-on-Schnittstelle, NUR LESEN, keine Automatisierung (kein automatisches Handeln, Verschicken, Kaufen), Code offen, kostenlos, Nachrichten gedrosselt, keine Blizzard-Grafiken außer aus dem Spielclient. Nutzer: „Streng an Blizzard-Richtlinien halten – ich will nicht gesperrt werden.“
 - KEIN „Herstellen“-Knopf. Ausnahmen vom Nur-Lesen: (1) Knopf „Im Berufefenster öffnen“ (öffnet, wählt Rezept, trägt Anzahl ein; Herstellen klickt der Spieler). (2) Guild-Found: fremden Handel automatisch schließen + einmal freundlich flüstern – nur bei gesetztem Haken.
 - Bestellungen und Planaufträge sind nur VERMERKE; Übergeben (Handel/Post/Gildenbank/Verzaubern im Handel) macht jeder selbst.
-- Auktionshaus: nur SUCHEN und LESEN (Preise), nie kaufen/bieten/einstellen. Preise werden NICHT geteilt.
+- Auktionshaus: nur SUCHEN und LESEN (Preise), nie kaufen/bieten/einstellen. Seit 1.4 werden gelesene Preise geteilt (Entscheidung des Nutzers, 5.11.2026): nur mit Guild-ERP-Spielern, gleiche Fraktion, abschaltbar.
 - GRUNDREGEL Stornieren: Guild ERP storniert nie etwas bei anderen; es sagt Bescheid, jeder entscheidet selbst.
 - FRAKTIONEN: Allianz-Charaktere lesen/sehen nur Allianz-Daten, Horde nur Horde (1.2.1).
 - GUILD-FOUND: Haken in den Optionen (Standard aus). Guild ERP nur innerhalb der Gilde; Handel von Nicht-Gildenmitgliedern automatisch ablehnen mit freundlicher Antwort; Post: fremde Post markieren + „Zurücksenden“ nur auf Klick, Warnung beim Schreiben an Nicht-Gilde (Blizzard-Senden-Knopf bleibt unberührt) (1.3).
@@ -67,7 +67,7 @@ Stand 17.10. (Nutzer): „Funktional bin ich hoch zufrieden. Jetzt gehts um den 
 ## Datenmodell (GuildERPData)
 - characters[Realm-Name] {name, voll, faction, recipes[Beruf][rezeptID], bags, bagsAt, bank, bankAt}
 - recipes[rezeptID] {name, icon, profession, professionID (Unter-Linie), itemID, reagents{{itemID, count}}, numMade, kategorie, at}
-- quellen[Rezeptname] {{art (Lehrer|Händler|Beute), wer, zone, x, y, kosten, skill, beruf, fraktion, at}}
+- quellen[Rezeptname] {{art (Lehrer|Händler|Beute), wer, zone, x, y, kosten, skill, beruf, fraktion, at, von (gemeldet von, sonst selbst gesehen)}}; Preise haben zusätzlich von; teilenStand[Absender]
 - items[itemID] {name, icon, q, bind}; vendors; prices[Fraktion][itemID] = {min, avg, n, at} oder {leer, at}
 - plans[rezeptID] {id, rezeptID, menge, wer (Vorname des Herstellers), at, fuer{[orderId]={n, von, mats, quittiert}}}
 - orders[id] {id, von, an, fuer, notiz, at, status, kopfRev, gesehen{}, plan, mats, ausgeblendet, zeilen{{itemID, rezeptID, n, zusagen{[Name]={n, weg 1..4, g, at}}}}}
@@ -76,7 +76,7 @@ Stand 17.10. (Nutzer): „Funktional bin ich hoch zufrieden. Jetzt gehts um den 
 - diagnostics {abgleich, optik, lookFehler, fremdesFenster, aufgeraeumt, …}
 
 ## Weitere Anforderungen
-1. Standalone-Quellen: seit 1.4 eingebaut, Spieltest steht aus; Teilen mit der Gilde noch offen (POLISHING.md).
+1. Standalone-Quellen und Teilen (Fundorte, Preise): seit 1.4 eingebaut, Spieltest steht aus.
 2. Spieltest Guild-Found (Handel, Flüstern, Post, Gildenabgleich mit vielen Online-Mitgliedern).
 3. Spiel-Look auf die übrigen Fenster ausdehnen, „[n]“ in der Liste.
 4. Nutzungsbedingungen prüfen, bevor die Gilde Guild ERP nutzt.

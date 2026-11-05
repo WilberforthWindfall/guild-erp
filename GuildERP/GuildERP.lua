@@ -1222,6 +1222,7 @@ function Kat.QuellenLesen(lesen)
     if not ok then
         B.Diagnose("fehler", "Quellen", fehler)
     end
+    Kat.VielleichtTeilen()
 end
 
 -- Namen der gelernten Rezepte eines Berufs (Rezeptname UND Name des Ergebnisses,
@@ -1274,7 +1275,7 @@ local function GraueRezepte(beruf, fraktion, gelernt)
                 if q.beruf == beruf and sichtbar(q.fraktion) then
                     quelleDazu(name, {
                         art = q.art, wer = q.wer, zone = q.zone, x = q.x, y = q.y,
-                        cost = q.kosten, skill = q.skill,
+                        cost = q.kosten, skill = q.skill, von = q.von,
                     })
                 end
             end
@@ -2376,6 +2377,9 @@ local function QuelleZeile(q)
     if q.skill then
         table.insert(teile, "ab Fertigkeit " .. q.skill)
     end
+    if q.von then
+        table.insert(teile, "gemeldet von " .. B.Anzeige(q.von))
+    end
     return table.concat(teile, ", ")
 end
 
@@ -2587,7 +2591,7 @@ local function RezeptbuchZeigen(f, fraktion, rezepte, berufe)
     end
     if #grau > 0 then
         local grauOffen = d.settings.grauOffen == true or suche ~= "" or #berufe[beruf] == 0
-        kopf("Noch nicht gelernt", #grau .. ", Quelle gesehen", grauOffen, false, function()
+        kopf("Noch nicht gelernt", #grau .. ", Quelle bekannt", grauOffen, false, function()
             local s = Daten().settings
             s.grauOffen = not (s.grauOffen == true)
         end)
@@ -3393,6 +3397,7 @@ function B.StandSenden(sofort)
             end
             B.Paket("I", table.concat(teile, ","))
             B.Einreihen("S~" .. Kat.Eigener())
+            Kat.TeilenStandSenden()
         end)
     end)
 end
@@ -3526,6 +3531,17 @@ function B.Empfangen(text, absender)
     elseif art == "Q" then
         if B.Gleich(B.Name(B.D(rest)), B.Ich()) then
             Kat.Senden(true)
+        end
+    elseif art == "T" then
+        B.Sicher("Teilen", Kat.TeilenStandEmpfangen, rest, absender)
+    elseif art == "R" then
+        if B.Gleich(B.Name(B.D(rest)), B.Ich()) then
+            B.Sicher("Teilen", Kat.TeilenSenden)
+        end
+    elseif art == "Z" or art == "W" then
+        local inhalt = B.Teil(art, rest, absender, 40)
+        if inhalt then
+            B.Sicher("Teilen", art == "Z" and Kat.QuellenEmpfangen or Kat.PreiseEmpfangen, inhalt, absender)
         end
     elseif art == "I" or art == "K" then
         local inhalt = B.Teil(art, rest, absender, art == "K" and 80 or 30)
@@ -5637,7 +5653,7 @@ function A.Text(itemID, mitZeit, tinte)
         t = Farbe("8a7a52", "AH:") .. Farbe("c9b88a", " ab ") .. A.Muenzen(p.min) .. Farbe("c9b88a", " · Schnitt ") .. A.Muenzen(p.avg)
     end
     if mitZeit then
-        t = t .. Farbe("8a8578", " · " .. P.Zeit(p.at))
+        t = t .. Farbe("8a8578", " · " .. P.Zeit(p.at) .. (p.von and (", von " .. B.Anzeige(p.von)) or ""))
     end
     return t
 end
@@ -5803,6 +5819,7 @@ function A.Fertig(itemID, angebote)
             A.Preise()[itemID] = { leer = true, at = time() }
         end
         eintrag.p = A.Preise()[itemID]
+        Kat.VielleichtTeilen()
     end
     table.insert(A.letzte, 1, eintrag)
     while #A.letzte > 6 do
@@ -6147,7 +6164,9 @@ function Kat.JetztAbgleichen()
     end
     local d = Kat.Daten()
     d.fremdStand = {}
+    d.teilenStand = {}
     Kat.gesendet = nil
+    Kat.teilenGesendet = nil
     B.Einreihen("H~2")
     B.StandSenden(true)
     Melden("Abgleich gestartet. Das dauert etwa 20 Sekunden.")
@@ -6176,6 +6195,212 @@ function Kat.DiagnoseZeigen()
     print("  Rezeptlisten von anderen: " .. n .. " Charaktere")
     if g.letzte then
         print("  Zuletzt: " .. g.letzte)
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- Teilen (ab 1.4): Fundorte von Rezepten und Auktionshaus-Preise, nur zwischen Spielern mit
+-- Guild ERP und nur innerhalb der eigenen Fraktion. Jeder sendet nur, was er SELBST gesehen hat
+-- (nichts wird weitergereicht). Zuerst geht eine Pruefzahl raus ("T~zahl"), wer sie noch nicht
+-- kennt, fragt nach ("R~Name"), dann kommen die Pakete "Z" (Fundorte) und "W" (Preise).
+-- Aeltere Versionen ignorieren diese Nachrichten. Bei Preisen gewinnt der neuere Zeitstempel.
+-- ---------------------------------------------------------------------------
+K.TEILEN_QUELLEN_MAX = 6000 -- Zeichen je Paket (30 Teile, gut eine halbe Minute)
+K.TEILEN_PREISE_MAX = 3000  -- Zeichen je Paket (etwa 90 Preise)
+K.TEILEN_PREISE_ALTER = 3 * 86400
+K.TEILEN_QUELLEN_JE_REZEPT = 20
+K.QUELLEN_ARTEN = { Lehrer = true, ["Händler"] = true, Beute = true }
+
+-- Text aus den neuesten Eintraegen bauen, bis die Hoechstmenge erreicht ist
+function Kat.TeilenBauen(eintraege, max)
+    table.sort(eintraege, function(a, b)
+        if a.at ~= b.at then
+            return a.at > b.at
+        end
+        return a.text < b.text
+    end)
+    local teile, laenge = {}, 0
+    for _, e in ipairs(eintraege) do
+        if laenge + #e.text > max then
+            break
+        end
+        table.insert(teile, e.text)
+        laenge = laenge + #e.text + 1
+    end
+    return teile
+end
+
+function Kat.QuellenText()
+    local fraktion = SpielerFraktion()
+    local eintraege = {}
+    for name, quellen in pairs(Daten().quellen) do
+        for _, q in ipairs(quellen) do
+            local f = q.fraktion
+            if not q.von and (not f or f == "Neutral" or f == fraktion) then
+                local felder = { B.M(name), B.M(q.art), B.M(q.wer), B.M(q.zone), q.x or "", q.y or "", q.kosten or "",
+                    q.skill or "", B.M(q.beruf), B.M(f), q.at or 0 }
+                table.insert(eintraege, { at = q.at or 0, text = table.concat(felder, "=") })
+            end
+        end
+    end
+    return table.concat(Kat.TeilenBauen(eintraege, K.TEILEN_QUELLEN_MAX), "^")
+end
+
+function Kat.PreiseText()
+    local grenze = time() - K.TEILEN_PREISE_ALTER
+    local eintraege = {}
+    for id, p in pairs(A.Preise()) do
+        if not p.von and (p.at or 0) > grenze then
+            local felder = { id, p.leer and 0 or (p.min or 0), p.leer and 0 or (p.avg or 0), p.n or 0, p.at }
+            table.insert(eintraege, { at = p.at, text = table.concat(felder, "=") })
+        end
+    end
+    local teile = Kat.TeilenBauen(eintraege, K.TEILEN_PREISE_MAX)
+    if #teile == 0 then
+        return ""
+    end
+    return B.M(SpielerFraktion()) .. "^" .. table.concat(teile, ",")
+end
+
+-- Pruefzahl des eigenen Standes, nil wenn es nichts zu teilen gibt
+function Kat.TeilenZahl()
+    if not O.Wert("teilen") then
+        return nil
+    end
+    local text = Kat.QuellenText() .. "#" .. Kat.PreiseText()
+    return text ~= "#" and Kat.Pruefzahl(text) or nil
+end
+
+function Kat.TeilenStandSenden()
+    local zahl = Kat.TeilenZahl()
+    if zahl then
+        Kat.teilenGemeldet = zahl
+        B.Einreihen("T~" .. zahl)
+    end
+end
+
+-- Neues gesehen: spaetestens nach einer Minute Bescheid sagen, nie oefter
+function Kat.VielleichtTeilen()
+    if Kat.teilenWartet or not O.Wert("teilen") then
+        return
+    end
+    Kat.teilenWartet = true
+    C_Timer.After(60, function()
+        Kat.teilenWartet = false
+        if B.InGruppe() and Kat.TeilenZahl() ~= Kat.teilenGemeldet then
+            B.Sicher("Teilen", Kat.TeilenStandSenden)
+        end
+    end)
+end
+
+function Kat.TeilenStandEmpfangen(zahl, absender)
+    zahl = string.match(zahl or "", "^(%d+)$")
+    if not zahl or not O.Wert("teilen") then
+        return
+    end
+    local d = Kat.Daten()
+    d.teilenStand = d.teilenStand or {}
+    if d.teilenStand[absender] ~= zahl then
+        d.teilenStand[absender] = zahl
+        B.Einreihen("R~" .. B.M(absender))
+    end
+end
+
+function Kat.TeilenSenden()
+    local zahl = Kat.TeilenZahl()
+    -- fragen mehrere gleichzeitig, wird nur einmal gesendet
+    if not zahl or (Kat.teilenGesendet == zahl and time() - (Kat.teilenGesendetAt or 0) < 20) then
+        return
+    end
+    Kat.teilenGesendet, Kat.teilenGesendetAt = zahl, time()
+    local quellen, preise = Kat.QuellenText(), Kat.PreiseText()
+    if quellen ~= "" then
+        B.Paket("Z", quellen)
+    end
+    if preise ~= "" then
+        B.Paket("W", preise)
+    end
+end
+
+-- Zeitstempel anderer: nie in der Zukunft, sonst bliebe ein Preis fuer immer "der neueste"
+function Kat.TeilenZeit(text)
+    local at = tonumber(text)
+    return at and at > 0 and math.floor(math.min(at, time())) or nil
+end
+
+function Kat.QuellenEmpfangen(text, absender)
+    if not O.Wert("teilen") then
+        return
+    end
+    local d = Daten()
+    local fraktion = SpielerFraktion()
+    local neu = 0
+    for block in string.gmatch(text or "", "[^%^]+") do
+        local w = {}
+        for feld in string.gmatch(block .. "=", "([^=]*)=") do
+            table.insert(w, feld)
+        end
+        local name, art, wer = B.Kurz(B.D(w[1]), 80), B.D(w[2]), B.Kurz(B.D(w[3]), 60)
+        local beruf, f, at = B.Kurz(B.D(w[9]), 40), B.D(w[10]), Kat.TeilenZeit(w[11])
+        local sichtbar = f == "" or f == "Neutral" or f == fraktion
+        if name ~= "" and K.QUELLEN_ARTEN[art] and wer ~= "" and beruf ~= "" and at and sichtbar then
+            local q = { art = art, wer = wer, zone = B.Kurz(B.D(w[4]), 60), x = tonumber(w[5]), y = tonumber(w[6]),
+                kosten = tonumber(w[7]), skill = tonumber(w[8]), beruf = beruf, fraktion = f ~= "" and f or nil,
+                at = at, von = absender }
+            local liste = d.quellen[name] or {}
+            local alt
+            for i, e in ipairs(liste) do
+                if e.art == q.art and e.wer == q.wer and e.zone == q.zone and e.beruf == q.beruf then
+                    alt = i
+                end
+            end
+            if alt then
+                -- selbst Gesehenes bleibt, Fremdes wird durch Neueres ersetzt
+                if liste[alt].von and (liste[alt].at or 0) < at then
+                    liste[alt] = q
+                end
+            elseif #liste < K.TEILEN_QUELLEN_JE_REZEPT then
+                table.insert(liste, q)
+                d.quellen[name] = liste
+                neu = neu + 1
+            end
+        end
+    end
+    if neu > 0 then
+        O.Chat(B.Anzeige(absender) .. " hat " .. neu .. (neu == 1 and " Fundort" or " Fundorte") .. " von Rezepten geteilt.")
+        if FensterAktualisieren then
+            FensterAktualisieren()
+        end
+    end
+end
+
+function Kat.PreiseEmpfangen(text, absender)
+    if not O.Wert("teilen") then
+        return
+    end
+    local kopf, inhalt = string.match(text or "", "^([^%^]*)%^(.*)$")
+    -- Allianz sieht nur Allianz-Preise, Horde nur Horde-Preise
+    if not kopf or B.D(kopf) ~= SpielerFraktion() then
+        return
+    end
+    local preise = A.Preise()
+    local neu = false
+    for id, min, avg, n, zeit in string.gmatch(inhalt, "(%d+)=(%d+)=(%d+)=(%d+)=(%d+)") do
+        id = tonumber(id)
+        local at = Kat.TeilenZeit(zeit)
+        local alt = preise[id]
+        if id and id > 0 and at and (not alt or (alt.at or 0) < at) then
+            min, avg, n = B.Zahl(min, 1e10), B.Zahl(avg, 1e10), B.Zahl(n, 1e7)
+            if min > 0 then
+                preise[id] = { min = min, avg = avg, n = n, at = at, von = absender }
+            else
+                preise[id] = { leer = true, at = at, von = absender }
+            end
+            neu = true
+        end
+    end
+    if neu and FensterAktualisieren then
+        FensterAktualisieren()
     end
 end
 
@@ -8049,7 +8274,7 @@ function Kat.BaumZeigen(R, rid, zutaten, menge, alle)
             table.sort(namen)
             table.insert(zeilen, Farbe(K.STATUS_HEX.gelb, "Kann herstellen: " .. table.concat(namen, ", ")))
         end
-        local ah = A.Text(itemID)
+        local ah = A.Text(itemID, true)
         if ah then
             table.insert(zeilen, ah)
         end
@@ -8392,7 +8617,7 @@ end
 -- ---------------------------------------------------------------------------
 -- Optionen und Minimap-Knopf (Version 1.1)
 -- ---------------------------------------------------------------------------
-O.STANDARD = { gilde = false, look = "erp", hinweis = "knopf", ton = true, chat = true, minimap = true, ah = "auto", groesse = 100, winkel = 200, ungelernt = true }
+O.STANDARD = { gilde = false, look = "erp", hinweis = "knopf", ton = true, chat = true, minimap = true, ah = "auto", groesse = 100, winkel = 200, ungelernt = true, teilen = true }
 
 function O.Wert(name)
     local s = Daten().settings
@@ -8685,7 +8910,8 @@ function O.Zeigen()
             { wert = "knopf", text = "Nur auf Knopfdruck" },
             { wert = "nie", text = "Nie" },
         })
-        haken(zeile("Noch nicht gelernte Berufe zeigen", "Berufe, von denen du schon Rezepte gesehen hast"), "ungelernt")
+        haken(zeile("Noch nicht gelernte Berufe zeigen", "Berufe, von denen dir schon Rezepte bekannt sind"), "ungelernt")
+        haken(zeile("Fundorte und Preise teilen", "Nur mit Spielern, die Guild ERP haben, gleiche Fraktion"), "teilen")
         haken(zeile("Guild-Found", "Guild ERP, Handel und Post nur innerhalb der Gilde"), "gilde")
         -- Reihenfolge der Reiter (ab 1.1.9)
         local zr = zeile("Reihenfolge der Reiter", "Mit den Pfeilen nach oben oder unten schieben")
