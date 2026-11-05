@@ -1068,6 +1068,32 @@ end
 -- ---------------------------------------------------------------------------
 K.LEHRER_ARTEN = { header = true, available = true, unavailable = true, used = true }
 
+-- Der Lehrer bietet auch die naechste Berufsstufe an ("Kochgeselle"). Das ist kein Rezept, und das
+-- Spiel gibt dafuer kein Merkmal her, darum am Namen erkennen (Ende des Namens, nur so ist
+-- "Lagerfeuer des Gesellen" oder "Expertenlagerfeuer" nicht betroffen).
+K.STUFEN_ENDEN = { "lehrling", "geselle", "gesellin", "experte", "expertin", "fachmann", "fachfrau", "handwerker",
+    "handwerkerin", "meister", "meisterin" }
+
+function Kat.IstStufe(name)
+    local klein = string.lower(tostring(name or ""))
+    for _, ende in ipairs(K.STUFEN_ENDEN) do
+        if string.sub(klein, -#ende) == ende then
+            return true
+        end
+    end
+    return false
+end
+
+-- Faelschlich gemerkte Berufsstufen entfernen (einmal beim Start)
+function Kat.QuellenAufraeumen()
+    local quellen = Daten().quellen
+    for name in pairs(quellen) do
+        if Kat.IstStufe(name) then
+            quellen[name] = nil
+        end
+    end
+end
+
 -- Neue Quelle anlegen oder bekannte auffrischen. Liefert true, wenn sie neu ist.
 function Kat.QuelleMerken(rezept, q)
     local d = Daten()
@@ -1165,7 +1191,7 @@ function Kat.LehrerLesen()
                 beruf, wert = Kat.Berufswert(Kat.Beschreibung("GetTrainerService", i))
             end
             -- ohne Berufswert ist es eine Klassen- oder Waffenfaehigkeit: gehoert nicht hierher
-            if beruf and beruf ~= "" and wert then
+            if beruf and beruf ~= "" and wert and not Kat.IstStufe(name) then
                 local kosten = GetTrainerServiceCost and GetTrainerServiceCost(i) or nil
                 if Kat.QuelleMerken(name, { art = "Lehrer", wer = lehrer, zone = zone, x = x, y = y,
                     kosten = kosten, skill = wert, beruf = beruf, fraktion = fraktion }) then
@@ -1333,6 +1359,9 @@ local function GraueRezepte(beruf, fraktion, gelernt)
     end
     -- dieselbe Quelle kann aus beiden Sammlungen kommen, sie zaehlt nur einmal
     local function quelleDazu(name, q)
+        if Kat.IstStufe(name) then
+            return -- auch aus dem Katalog des Reisefuehrers
+        end
         local e = eintrag(name)
         for _, alt in ipairs(e.quellen) do
             if alt.art == q.art and alt.wer == q.wer and alt.zone == q.zone then
@@ -6421,7 +6450,7 @@ function Kat.QuellenEmpfangen(text, absender)
         local name, art, wer = B.Kurz(B.D(w[1]), 80), B.D(w[2]), B.Kurz(B.D(w[3]), 60)
         local beruf, f, at = B.Kurz(B.D(w[9]), 40), B.D(w[10]), Kat.TeilenZeit(w[11])
         local sichtbar = f == "" or f == "Neutral" or f == fraktion
-        if name ~= "" and K.QUELLEN_ARTEN[art] and wer ~= "" and beruf ~= "" and at and sichtbar then
+        if name ~= "" and not Kat.IstStufe(name) and K.QUELLEN_ARTEN[art] and wer ~= "" and beruf ~= "" and at and sichtbar then
             local q = { art = art, wer = wer, zone = B.Kurz(B.D(w[4]), 60), x = tonumber(w[5]), y = tonumber(w[6]),
                 kosten = tonumber(w[7]), skill = tonumber(w[8]), beruf = beruf, fraktion = f ~= "" and f or nil,
                 at = at, von = absender }
@@ -9303,6 +9332,7 @@ function O.Ereignis(event, ...)
         if dg.fehlerVersion ~= K.VERSION then
             dg.fehlerVersion, dg.fehler = K.VERSION, nil
         end
+        Kat.QuellenAufraeumen()
         O.Nach(3, function()
             Charakter()
             TaschenLesen()

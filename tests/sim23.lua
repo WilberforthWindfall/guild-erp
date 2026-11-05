@@ -20,6 +20,9 @@ local LEHRER = {
     { "Testrezept Lehrer", nil, "available", req = { "Schmiedekunst", 75 }, kosten = 500 },
     { "Testrezept Beschreibung", "unavailable", nil, tip = "Benötigt Schmiedekunst (90)", kosten = 700 }, -- Art an 2. Stelle
     { "Klassenzauber", nil, "available" },
+    { "Kochgeselle", nil, "available", req = { "Kochkunst", 50 }, kosten = 500 }, -- Berufsstufe (so im echten Spiel gesehen)
+    { "Expertenlagerfeuer", nil, "available", req = { "Kochkunst", 175 } },        -- echtes Rezept, trotz des Wortes
+    { "Lagerfeuer des Gesellen", nil, "available", req = { "Kochkunst", 100 } },   -- echtes Rezept, trotz des Wortes
     { "Testrezept Horde", nil, "available", req = { "Lederverarbeitung", 10 } },
 }
 function GetNumTrainerServices() return #LEHRER end
@@ -55,9 +58,11 @@ C_TooltipInfo = {
 local UnitNameEcht = UnitName
 function UnitName(u) if u == "target" then return "Defias-Schmied" end return UnitNameEcht(u) end
 
+GuildERPData.quellen = { Schmiedegeselle = { { art = "Lehrer", wer = "Alt", zone = "Z", beruf = "Schmiedekunst" } } }
 assert(loadfile(arg[1]))()
 Fire("PLAYER_LOGIN"); RunTimers()
 local d = GuildERPData
+assert(not d.quellen["Schmiedegeselle"], "alte Berufsstufe muss beim Start verschwinden")
 local function zahl(t) local n = 0 for _ in pairs(t or {}) do n = n + 1 end return n end
 local function eine(rezept)
     assert(d.quellen[rezept], "fehlt: " .. rezept)
@@ -72,6 +77,8 @@ assert(q.art == "Lehrer" and q.wer == "Testlehrer" and q.zone == "Eisenschmiede"
     and q.beruf == "Schmiedekunst" and q.fraktion == "Alliance", "Lehrer-Quelle falsch")
 assert(eine("Testrezept Beschreibung").skill == 90, "Fertigkeit aus der Beschreibung fehlt")
 assert(not d.quellen["Klassenzauber"], "Klassenzauber darf nicht gemerkt werden")
+assert(not d.quellen["Kochgeselle"], "Berufsstufe ist kein Rezept")
+assert(d.quellen["Expertenlagerfeuer"] and d.quellen["Lagerfeuer des Gesellen"], "echte Rezepte fehlen")
 assert(not d.quellen["Rüstung"], "Ueberschrift darf nicht gemerkt werden")
 assert(not filterGeaendert, "Filter im Lehrerfenster darf nicht veraendert werden")
 
