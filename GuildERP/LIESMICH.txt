@@ -1,0 +1,194 @@
+Guild ERP 1.3 (Beta)
+====================
+
+Was macht das Add-on?
+Links im Fenster ist dein Rezeptbuch, rechts der Herstellauftrag.
+Du wählst links ein Rezept, zum Beispiel einen Gürtel. Rechts siehst du dann die
+Stückliste: welche Zutaten du brauchst, und bei Zutaten, die man selbst herstellen
+kann, auch deren Zutaten. Eine farbige Raute zeigt dir sofort den Stand:
+
+  leuchtend grün = liegt in deiner Tasche (der Charakter, mit dem du spielst)
+  grün = da, aber woanders (Bank oder anderer Charakter)
+  gelb = kann einer deiner Charaktere herstellen
+  blau = jemand aus deiner Gruppe hat zugesagt, es zu liefern (nur bei Planaufträgen)
+  rot  = fehlt (wenn bekannt: welcher Händler es verkauft)
+
+Rechts in jeder Zeile steht "da / nötig", zum Beispiel 0 / 2.
+Gezählt werden alle deine eigenen Charaktere derselben Fraktion.
+
+So geht's
+1. Bei jedem Charakter einmal sein Berufefenster öffnen (z. B. Schmiedekunst,
+   Bergbau). Guild ERP merkt sich, welche Rezepte er kennt und welche Zutaten sie
+   brauchen.
+2. Bei jedem Charakter einmal die Bank öffnen. Die Taschen werden von selbst erfasst.
+3. Händler ansprechen genügt, damit Guild ERP sich merkt, wo es Zutaten zu kaufen gibt.
+4. /gerp tippen: Die Werkstatt öffnet sich.
+   - Links oben auf das Handwerk klicken: Eine Liste klappt auf (Haupt- und
+     Nebenberufe). Es erscheinen nur Handwerke, die einer deiner Charaktere kann.
+     Darunter kannst du in diesem Handwerk nach Rezepten suchen.
+   - Ein Klick auf ein Rezept macht es zum Wunschrezept (rechts).
+   - "Wer stellt her?": Vorgewählt ist der Charakter, mit dem du gerade spielst.
+     Mit einem Klick wählst du einen anderen, der das Rezept auch kennt.
+   - Mit -5, -, + und +5 die Menge ändern. Wählst du ein anderes Rezept,
+     springt die Menge wieder auf 1.
+   - Liegt alles in deiner Tasche, leuchtet unten ein grüner Kasten mit dem Knopf
+     "Im Berufefenster öffnen". Er öffnet dein normales Berufefenster, wählt das
+     Rezept an und trägt die Anzahl ein. Herstellen klickst du dort selbst.
+     Klappt das Öffnen nicht, sagt Guild ERP Bescheid: Dann öffnest du das
+     Berufefenster selbst, und Guild ERP wählt Rezept und Anzahl trotzdem aus.
+     Ist nicht alles in der Tasche, steht im Kasten, was du holen musst.
+   - Auf eine Zeile mit [-] klicken, um die Unter-Zutaten zu- oder aufzuklappen.
+   - Maus über eine Zeile: Gegenstands-Info (und alle bekannten Händler).
+5. /gerp info zeigt im Chat, was über deine Charaktere bekannt ist.
+
+Bestellungen (in der Gruppe)
+- Fehlt dir etwas, klicke in der Werkstatt bei der Zutat auf "Bestellen" oder unten
+  auf "Fehlendes bestellen". Es öffnet sich ein Bestellschein: Zeilen kannst du
+  abwählen, Mengen ändern, wählen, an wen es geht, und eine Notiz dazuschreiben.
+  "Bestellung senden" schickt den Schein an deine Gruppe.
+- Bist du gerade in keiner Gruppe, wird die Bestellung gespeichert und gesendet,
+  sobald ihr zusammen in einer Gruppe seid. Beide brauchen Guild ERP.
+- Oben im Fenster gibt es den Reiter "Bestellungen". Links steht, was bei dir
+  bestellt wurde: Mit "Ich liefere" sagst du zu, wie viele du lieferst und wie
+  (direkt handeln, per Post oder in die Gildenbank). Hast du geliefert, klicke
+  "Geliefert". Rechts stehen deine eigenen Bestellungen mit dem Stand jeder Zeile.
+  Hast du alles bekommen, klicke "Abschließen".
+- Eine Bestellung ist nur ein Vermerk. Übergeben (Handel, Post, Gildenbank) machst
+  du selbst wie gewohnt.
+
+Planaufträge (neu in 0.6)
+- Willst du etwas sicher herstellen, klicke in der Werkstatt oben auf der Karte
+  "Vormerken". Auf der Karte steht dann "Planauftrag seit ...".
+- Alles, was du danach für dieses Rezept bestellst, gehört zum Planauftrag. Sagt jemand
+  aus deiner Gruppe eine Lieferung zu, wird die Zutat blau und zählt als "kommt noch".
+  Der Knopf unten heißt dann "Rest bestellen": Er bestellt nur, was weder da noch
+  zugesagt noch schon bestellt ist.
+- Hat jemand "Geliefert" geklickt, zählt die Zutat, sobald sie in deiner Tasche oder
+  Bank liegt (bei Post also erst aus dem Briefkasten holen).
+- Oben gibt es den Reiter "Planaufträge". Dort siehst du alle vorgemerkten Herstellungen
+  mit Ampel. Ein Klick auf einen Planauftrag klappt ihn auf: Bei jeder Zutat steht, wo
+  sie liegt und wer wie viel zugesagt hat. "In der Werkstatt öffnen" springt zurück.
+- Im aufgeklappten Planauftrag stehen Unter-Zutaten (z. B. Kupfererz unter Kupferbarren)
+  eingerückt unter ihrer Zutat. Ein Klick auf die Zeile klappt sie zu oder auf.
+  Unter-Zutaten erscheinen nur, wenn die Zutat selbst noch fehlt (hast du die
+  Kupferbarren schon, braucht es kein Kupfererz).
+- "Auftragsnetz" öffnet ein eigenes Fenster: links was hergestellt wird, rechts daneben
+  die Zutaten und deren Zutaten als Kacheln, verbunden mit Linien. Jede Kachel zeigt
+  Farbe, "da / nötig", wo es liegt und wer etwas zugesagt hat. Nur zum Anschauen.
+- Bist du fertig, klicke in der Werkstatt "Erledigt".
+- Auf jeder Planauftrag-Karte stehen unten die Knöpfe "In der Werkstatt öffnen" und
+  "Auftragsnetz", rechts daneben "Stornieren".
+
+Preise aus dem Auktionshaus (neu in 0.8)
+- Öffnest du das Auktionshaus, sucht Guild ERP nacheinander nach den Zutaten der Rezepte,
+  die deine Charaktere kennen (eine Suche pro Sekunde). Rechts neben dem Auktionshaus
+  zeigt ein kleines Fenster den Fortschritt. Mit "Stopp" brichst du ab.
+- Suchst du selbst etwas, macht Guild ERP 10 Sekunden Pause.
+- Gemerkt wird der günstigste Preis und der Durchschnitt der Angebote. Angebote, die
+  mehr als dreimal so teuer sind wie das günstigste, zählen beim Durchschnitt nicht mit.
+- Preise, die jünger als 30 Minuten sind, werden nicht neu gesucht.
+- Die Preise stehen in der Werkstatt, in den Planaufträgen, im Auftragsnetz und bei den
+  Bestellungen ("AH: ab ... · Schnitt ..."), dazu was das Fehlende etwa kostet und was
+  eine Bestellung wert ist. G, S, K = Gold, Silber, Kupfer.
+- Guild ERP kauft, bietet und verkauft nichts. Preise werden an niemanden gesendet.
+
+Katalog (neu in 0.9)
+- Oben gibt es den Reiter "Katalog". Oben links wählst du einen Beruf aus der Liste.
+  Darunter stehen alle Rezepte, die du oder jemand aus deiner Gruppe kennt, rechts
+  daneben wer. Ein Klick auf ein Rezept zeigt, wer es kann und was es braucht.
+- Damit die Rezepte deiner Mitspieler bei dir erscheinen: Sie öffnen einmal ihre
+  Berufefenster, dann geht ihr zusammen in eine Gruppe. Alle brauchen Guild ERP 0.9.
+- Erscheinen die Rezepte der anderen nicht, klicke im Katalog unten "Jetzt abgleichen".
+  "/gerp abgleich" zeigt im Chat, was gesendet und empfangen wurde.
+- Neu im Hintergrund: Beim Gruppenbeitritt sagt jeder zuerst nur kurz, welchen Stand
+  er hat. Geschickt wird nur, was der andere noch nicht hat. Im Kampf wird nichts
+  gesendet.
+
+Aus dem Katalog bestellen (neu in 1.0)
+- Im Katalog ein Rezept anklicken. Rechts unten: wie viele, bei wem (oder "Alle, die es
+  können"), wer die Zutaten besorgt ("Ich bringe die Zutaten mit" oder "Hersteller
+  besorgt sie") und eine Notiz. "Bestellen" schickt die Bestellung an die Gruppe.
+- Das geht auch für Verzauberungen. Lieferweg dafür: "Beim Handeln verzaubern".
+- Beim Hersteller erscheint oben ein Hinweisfenster mit "Ansehen" und "Später".
+- "Ich liefere" sieht nur, wer das Rezept kennt. Im Zusage-Fenster ist der Haken
+  "Als Planauftrag übernehmen" gesetzt: Die Bestellung steht dann unter Planaufträge.
+  Bringt der Besteller die Zutaten mit, zählen sie dort blau als "bringt ... mit".
+
+Stornieren (neu in 1.0)
+- Planaufträge und eigene Bestellungen haben den Knopf "Stornieren". Ein Fenster zeigt,
+  was daran hängt (deine Zusagen, deine Bestellungen dazu). Mit Haken wählst du, was
+  mit storniert wird. Schon Geliefertes bleibt geliefert, das klärt ihr selbst.
+- Guild ERP storniert nie etwas bei anderen. Es sagt Bescheid: Am Planauftrag des
+  anderen erscheint ein roter Hinweis mit "Auch stornieren" und "Behalten", die
+  stornierte Bestellung steht durchgestrichen da und lässt sich ausblenden.
+
+Namen (neu in 1.0)
+- Guild ERP merkt sich Vor- und Nachnamen. Angezeigt wird der Vorname, nur bei
+  gleichem Vornamen der volle Name. Den eigenen vollen Namen lernt Guild ERP, sobald
+  du einmal in einer Gruppe bist.
+- Beide brauchen Version 1.0. Ältere Versionen sehen Bestellungen aus dem Katalog nicht.
+
+Neu in 1.1
+- Katalog: Links stehen die Rezepte in aufklappbaren Gruppen (z. B. "Armschiene",
+  "Brust"; bei hergestellten Sachen nach Art des Gegenstands). Rechts stehen die
+  Zutaten als Baum: Was jemand herstellen kann, klappt auf und zeigt seine Zutaten.
+- Im Katalog fehlen Rezepte, die dein gerade gespielter Charakter selbst kann, und
+  Gegenstände, die beim Herstellen seelengebunden werden (kann man nicht weitergeben).
+- Knopf an der Minimap: Gibt es Neues (Bestellung, Zusage, Storno), leuchtet er und
+  zeigt eine Zahl. Maus darüber zeigt die Meldungen. Linksklick öffnet Guild ERP,
+  Rechtsklick die Optionen. Ziehen verschiebt ihn am Rand.
+- Optionen: Zahnrad oben im Fenster, Rechtsklick auf den Minimap-Knopf oder
+  /gerp optionen. Einstellbar: wie Neues erscheint (Knopf, Fenster, nur Chat), Ton,
+  Chat-Meldungen, Minimap-Knopf, Auktionshaus-Preise (automatisch, per Knopf, nie),
+  Größe des Fensters.
+
+Mit dem Reiseführer
+Ist der Reiseführer installiert, gibt es links unter "Gelernt" eine zweite Gruppe
+"Noch nicht gelernt". Ein Klick auf die Überschrift klappt sie auf. Ein Klick auf
+ein graues Rezept zeigt rechts, wo du es lernen kannst. Ohne Reiseführer funktioniert alles andere genauso.
+
+Wichtig
+- Guild ERP liest nur. Es kauft, stellt her, verschickt oder handelt nichts.
+  Planaufträge und Bestellungen sind nur Vermerke.
+  Einzige Ausnahme: Auf deinen Klick öffnet es das Berufefenster und füllt es vor.
+- An andere Spieler gehen nur deine Bestellungen und Zusagen, und nur an deine
+  Gruppe (gedrosselt, höchstens eine Nachricht pro gut einer Sekunde).
+- Der Code ist offen lesbar und kostenlos.
+
+Neu in 1.1.2:
+- Maus über eine Bestellzeile (Bestellungen und Bestellschein) zeigt den normalen Spiel-Tooltip des Gegenstands bzw. der Verzauberung.
+
+Neu in 1.1.3:
+- Das Rezeptbuch in der Werkstatt ist jetzt wie der Katalog in aufklappbare Gruppen sortiert (z. B. Platte, Kette, Waffen). Plus/Minus klappt eine Gruppe auf oder zu; beim Suchen sind alle passenden Gruppen offen.
+
+Neu in 1.1.4:
+- Rezeptbuch und Katalog nutzen jetzt die Gruppen des Spiels (wie im Berufefenster, z. B. "Waffensteine", "Reagenzien"). Dafür einmal das Berufefenster jedes Charakters öffnen. Beim Abgleich werden die Gruppen an die Mitspieler weitergegeben.
+
+Neu in 1.1.5:
+- "Noch nicht gelernt" zeigt nur noch Rezepte, bei denen bekannt ist, wo man sie lernt (Lehrer oder Händler, die du schon besucht hast). So wird nichts vorweggenommen.
+- /gerp optik liest (nur lesen!) aus, wie das offene Berufefenster aussieht, als Vorlage für einen späteren Spiel-Look.
+
+Neu in 1.1.6 (Testversion):
+- Optionen > Aussehen: "Spiel-Look" lässt Guild ERP wie das Berufefenster aussehen (Metallrahmen mit rundem Bild, Holz-Hintergrund, goldene Gruppenköpfe, Suchfeld, Berufs-Karte rechts, Reiter als Symbole rechts am Fenster). Zurück mit "Guild ERP (dunkel)". Es werden nur Grafiken aus dem Spiel selbst benutzt.
+
+Neu in 1.1.7:
+- Spiel-Look: Bestellschein und Zusage-Fenster sind wieder deckend (nicht mehr durchscheinend).
+
+Neu in 1.1.8:
+- Fehler behoben: Klickte man im Chat auf den Berufe-Link eines anderen Spielers, merkte sich Guild ERP dessen Rezepte als eigene. Jetzt wird nur noch das eigene Berufefenster gelesen.
+- Beim Einloggen werden Hauptberufe entfernt, die der Charakter gar nicht gelernt hat (Meldung im Chat).
+
+Neu in 1.1.9:
+- Optionen > "Reihenfolge der Reiter": Werkstatt, Planaufträge, Bestellungen und Katalog mit den Pfeilen beliebig anordnen (gilt auch für die Symbole im Spiel-Look).
+
+Neu in 1.2:
+- Planaufträge: Oben stehen die des gerade gespielten Charakters. Die Planaufträge anderer Charaktere liegen darunter in einem eigenen Bereich, der zugeklappt startet. Die Zahl am Reiter zählt nur die eigenen.
+
+Neu in 1.2.1:
+- Allianz und Horde getrennt: Ein Allianz-Charakter sieht und teilt nur Daten von Allianz-Charakteren (Rezepte, Katalog, Planaufträge, Bestellungen, Bestand), ein Horde-Charakter nur Horde.
+
+Neu in 1.3 – Guild-Found (Optionen > Haken "Guild-Found", Standard: aus):
+- Guild ERP gleicht nur noch mit deiner Gilde ab (über den Gildenkanal, auch ohne Gruppe). Bestellungen gehen an "Alle in deiner Gilde" oder an ein Gildenmitglied, das online ist.
+- Handel: Öffnet jemand außerhalb deiner Gilde den Handel, schließt Guild ERP ihn und flüstert einmal freundlich (höchstens alle 5 Minuten pro Spieler, nie im Kampf): "Nein danke – wir spielen Guild-Found und handeln nur innerhalb unserer Gilde."
+- Post: Briefe von Spielern außerhalb der Gilde werden neben dem Briefkasten aufgelistet, mit Knopf "Zurücksenden" (nur auf Klick). Beim Schreiben an Nicht-Gildenmitglieder erscheint unter dem Namen eine rote Warnung. Verschickt wird trotzdem nur, was du selbst abschickst.
+- Wichtig: Alle, die zusammen Guild ERP nutzen, sollten den Haken gleich setzen. Mit Guild-Found redet Guild ERP nur mit anderen, die ihn auch gesetzt haben.

@@ -1,0 +1,8 @@
+# private Testdaten (echte gespeicherte Daten mit Charakternamen)
+tests/fixtures/
+# persoenliche Hinweise fuer Claude Code
+CLAUDE.local.md
+# Release-Pakete
+*.zip
+.DS_Store
+Thumbs.db
