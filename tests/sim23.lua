@@ -127,4 +127,50 @@ for _, k in ipairs(f.links.koepfe) do
         assert(k.rechts.text == "3, Quelle gesehen", "gelerntes Rezept steht noch da: " .. k.rechts.text)
     end
 end
+-- Eintrag in der Liste nennt den Fundort
+local fundort = false
+for _, z in ipairs(f.links.zeilen) do
+    if z.benutzt and string.find(z.hinweis.text or "", "Lehrer: Testlehrer, Eisenschmiede", 1, true) then fundort = true end
+end
+assert(fundort, "Fundort fehlt in der Liste")
+
+-- Beruf ohne Gelerntes: nur Quellen bekannt. Option an (Standard) zeigt ihn, Option aus nicht.
+d.quellen["Testrezept Horde"] = nil
+d.settings.wunsch = nil
+d.settings.beruf = "Lederverarbeitung"
+for _, c in pairs(d.characters) do if c.recipes then c.recipes["Lederverarbeitung"] = nil end end
+d.quellen["Nur gesehen"] = { { art = "Beute", wer = "Kobold", zone = "Elwynn", beruf = "Lederverarbeitung" } }
+GuildERPData.settings.grauOffen = false
+local function kopfRechts(titel)
+    for _, k in ipairs(f.links.koepfe) do
+        if k.benutzt and string.find(k.text.text, titel, 1, true) then return k.rechts.text end
+    end
+end
+SlashCmdList.GUILDERP(""); SlashCmdList.GUILDERP(""); RunTimers()
+assert(f.links.handwerk.text.text == "Lederverarbeitung", "Beruf ohne Gelerntes fehlt: " .. f.links.handwerk.text.text)
+assert(f.links.handwerk.rechts.text == "noch nicht gelernt", "Text rechts falsch: " .. f.links.handwerk.rechts.text)
+assert(kopfRechts("Noch nicht gelernt") == "1, Quelle gesehen", "Bereich muss bei so einem Beruf offen da sein")
+assert(kopfRechts("Gelernt") ~= "0", "leerer Kopf 'Gelernt' soll fehlen")
+local sichtbar = false
+for _, z in ipairs(f.links.zeilen) do
+    if z.benutzt and string.find(z.hinweis.text or "", "Beute: Kobold, Elwynn", 1, true) then sichtbar = true end
+end
+assert(sichtbar, "bei so einem Beruf muss der Eintrag ohne Aufklappen sichtbar sein")
+
+d.settings.optionen = d.settings.optionen or {}
+d.settings.optionen.ungelernt = false
+SlashCmdList.GUILDERP(""); SlashCmdList.GUILDERP(""); RunTimers()
+assert(f.links.handwerk.text.text ~= "Lederverarbeitung", "Option aus: Beruf darf nicht erscheinen")
+assert(d.quellen["Nur gesehen"], "Option aus: gemerkte Quelle muss erhalten bleiben")
+
+-- ganz neuer Spieler: Option an, noch nie ein Beruf. Gelernte Berufe gehen sonst vor.
+d.settings.optionen.ungelernt = nil
+d.settings.beruf = nil
+SlashCmdList.GUILDERP(""); SlashCmdList.GUILDERP(""); RunTimers()
+assert(f.links.handwerk.text.text ~= "Lederverarbeitung", "gelernter Beruf muss vorgehen: " .. f.links.handwerk.text.text)
+for _, c in pairs(d.characters) do c.recipes = {} end
+d.quellen = { ["Nur gesehen"] = d.quellen["Nur gesehen"] }
+SlashCmdList.GUILDERP(""); SlashCmdList.GUILDERP(""); RunTimers()
+assert(f.links.handwerk.text.text == "Lederverarbeitung", "ohne Beruf muss die Quelle sichtbar sein")
+
 realPrint("Standalone-Quellen ok: " .. zahl(d.quellen) .. " Rezepte")

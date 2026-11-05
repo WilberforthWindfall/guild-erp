@@ -199,3 +199,4 @@ Neu in 1.4 – Guild ERP braucht den Reiseführer nicht mehr:
 - "Noch nicht gelernt" füllt Guild ERP jetzt selbst: Sprich einen Lehrer oder Händler an, und es merkt sich, welche Rezepte es dort gibt, mit Ort, Preis und nötiger Fertigkeit. Es liest nur, gelernt oder gekauft wird nichts.
 - Lässt ein Gegner ein Rezept fallen, merkt sich Guild ERP auch das, sobald du die Beute öffnest.
 - Es erscheinen nur Rezepte, deren Quelle du schon gesehen hast. So wird nichts vorweggenommen.
+- Neue Option "Noch nicht gelernte Berufe zeigen" (Standard: an): Auch Berufe, die du noch nicht hast, stehen in der Auswahl, sobald du ein Rezept dafür gesehen hast. In der Liste steht bei jedem Rezept, wo du es gesehen hast.

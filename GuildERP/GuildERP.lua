@@ -1183,6 +1183,31 @@ function Kat.BeuteLesen()
     end
 end
 
+-- Option "ungelernt": auch Berufe zeigen, in denen noch kein eigener Charakter etwas kann,
+-- aber schon eine Quelle gesehen wurde. Solche Berufe bekommen eine leere Namensliste.
+function Kat.BerufeErgaenzen(berufe, fraktion)
+    if not O.Wert("ungelernt") then
+        return
+    end
+    local function dazu(beruf, f)
+        if beruf and (not f or f == "Neutral" or f == fraktion) then
+            berufe[beruf] = berufe[beruf] or {}
+        end
+    end
+    for _, quellen in pairs(Daten().quellen) do
+        for _, q in ipairs(quellen) do
+            dazu(q.beruf, q.fraktion)
+        end
+    end
+    local fd = Reisefuehrer()
+    local katalog = fd and fd.catalog and fd.catalog.recipes
+    for _, e in pairs(type(katalog) == "table" and katalog or {}) do
+        if type(e) == "table" then
+            dazu(e.profession, e.npcFaction)
+        end
+    end
+end
+
 function Kat.QuellenZahl()
     local zahl = 0
     for _ in pairs(Daten().quellen) do
@@ -2260,6 +2285,9 @@ end
 -- Fenster fuellen
 -- ---------------------------------------------------------------------------
 local function WerText(liste)
+    if #liste == 0 then
+        return "noch nicht gelernt"
+    end
     if #liste == 1 then
         return liste[1].name .. ", " .. liste[1].n .. (liste[1].n == 1 and " Rezept" or " Rezepte")
     end
@@ -2334,7 +2362,8 @@ local function GrauHinweis(e)
     if not q then
         return "Ort noch unbekannt"
     end
-    return (q.art or "Lehrer") .. " in " .. (q.zone or "?") .. (#e.quellen > 1 and ("  +" .. (#e.quellen - 1) .. " weitere") or "")
+    return (q.art or "Lehrer") .. ": " .. (q.wer or "?") .. ", " .. (q.zone or "?")
+        .. (#e.quellen > 1 and ("  +" .. (#e.quellen - 1) .. " weitere") or "")
 end
 
 local function QuelleZeile(q)
@@ -2359,8 +2388,10 @@ local function RezeptbuchZeigen(f, fraktion, rezepte, berufe)
         local w = type(d.settings.wunsch) == "number" and d.recipes[d.settings.wunsch]
         beruf = w and berufe[w.profession] and w.profession or nil
         if not beruf then
-            for b in pairs(berufe) do
-                if not beruf or b < beruf then
+            -- gelernte Berufe gehen vor solchen, von denen nur Quellen bekannt sind
+            for b, liste in pairs(berufe) do
+                local gelernterVorrang = beruf and (#liste > 0) ~= (#berufe[beruf] > 0)
+                if not beruf or (gelernterVorrang and #liste > 0) or (not gelernterVorrang and b < beruf) then
                     beruf = b
                 end
             end
@@ -2533,7 +2564,9 @@ local function RezeptbuchZeigen(f, fraktion, rezepte, berufe)
         end
     end
     local gelerntOffen = not IstZu("gruppe:gelernt")
-    kopf("Gelernt", tostring(#gelernt), gelerntOffen, true, function() Umklappen("gruppe:gelernt") end)
+    if #berufe[beruf] > 0 then
+        kopf("Gelernt", tostring(#gelernt), gelerntOffen, true, function() Umklappen("gruppe:gelernt") end)
+    end
     if gelerntOffen then
         gruppiert(gelernt, "gelernt", function(e)
             return e.id, e.r.itemID, e.r.name, e.id
@@ -2553,7 +2586,7 @@ local function RezeptbuchZeigen(f, fraktion, rezepte, berufe)
         end)
     end
     if #grau > 0 then
-        local grauOffen = d.settings.grauOffen == true or suche ~= ""
+        local grauOffen = d.settings.grauOffen == true or suche ~= "" or #berufe[beruf] == 0
         kopf("Noch nicht gelernt", #grau .. ", Quelle gesehen", grauOffen, false, function()
             local s = Daten().settings
             s.grauOffen = not (s.grauOffen == true)
@@ -8359,7 +8392,7 @@ end
 -- ---------------------------------------------------------------------------
 -- Optionen und Minimap-Knopf (Version 1.1)
 -- ---------------------------------------------------------------------------
-O.STANDARD = { gilde = false, look = "erp", hinweis = "knopf", ton = true, chat = true, minimap = true, ah = "auto", groesse = 100, winkel = 200 }
+O.STANDARD = { gilde = false, look = "erp", hinweis = "knopf", ton = true, chat = true, minimap = true, ah = "auto", groesse = 100, winkel = 200, ungelernt = true }
 
 function O.Wert(name)
     local s = Daten().settings
@@ -8652,6 +8685,7 @@ function O.Zeigen()
             { wert = "knopf", text = "Nur auf Knopfdruck" },
             { wert = "nie", text = "Nie" },
         })
+        haken(zeile("Noch nicht gelernte Berufe zeigen", "Berufe, von denen du schon Rezepte gesehen hast"), "ungelernt")
         haken(zeile("Guild-Found", "Guild ERP, Handel und Post nur innerhalb der Gilde"), "gilde")
         -- Reihenfolge der Reiter (ab 1.1.9)
         local zr = zeile("Reihenfolge der Reiter", "Mit den Pfeilen nach oben oder unten schieben")
@@ -8752,6 +8786,7 @@ function O.Anwenden()
     if O.fenster and O.fenster:IsShown() then
         O.Zeigen()
     end
+    FensterAktualisieren()
 end
 
 FensterAktualisieren = function()
@@ -8802,6 +8837,7 @@ FensterAktualisieren = function()
     if werk then
         local fraktion = SpielerFraktion()
         local _, rezepte, berufe = HerstellerSammeln(fraktion)
+        Kat.BerufeErgaenzen(berufe, fraktion)
         RezeptbuchZeigen(f, fraktion, rezepte, berufe)
         AuftragZeigen(f, fraktion, rezepte)
     elseif ansicht == "plan" then
