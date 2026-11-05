@@ -24,7 +24,8 @@ So geht's
 3. Händler ansprechen genügt, damit Guild ERP sich merkt, wo es Zutaten zu kaufen gibt.
 4. /gerp tippen: Die Werkstatt öffnet sich.
    - Links oben auf das Handwerk klicken: Eine Liste klappt auf (Haupt- und
-     Nebenberufe). Es erscheinen nur Handwerke, die einer deiner Charaktere kann.
+     Nebenberufe). Es erscheinen Handwerke, die einer deiner Charaktere kann, und solche,
+     von denen dir schon Rezepte bekannt sind (abschaltbar in den Optionen).
      Darunter kannst du in diesem Handwerk nach Rezepten suchen.
    - Ein Klick auf ein Rezept macht es zum Wunschrezept (rechts).
    - "Wer stellt her?": Vorgewählt ist der Charakter, mit dem du gerade spielst.
