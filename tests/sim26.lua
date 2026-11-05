@@ -91,6 +91,32 @@ for _, z in ipairs(f.rechts.zeilen) do
 end
 assert(geprueft, "Zutaten-Zeile nicht gefunden")
 
+-- Verfuegbarkeit: jeder Zustand hat ein eigenes Bildsymbol, fehlt die Grafik, kommt die Raute
+local function symbolVon(itemID)
+    for _, z in ipairs(f.rechts.zeilen) do
+        if z.benutzt and z.itemID == itemID then return z.punkt.texture, z.punkt.w end
+    end
+end
+local bild, breite = symbolVon(2770)
+assert(bild == "Interface\\RaidFrame\\ReadyCheck-NotReady" and breite == 14, "fehlt: " .. tostring(bild))
+assert(f.rechts.bereit.rauten.tasche.texture == "Interface\\Icons\\INV_Misc_Bag_08", "Tasche im Zaehler falsch")
+assert(f.rechts.bereit.rauten.gruen.texture == "Interface\\Icons\\INV_Box_01", "Woanders im Zaehler falsch")
+d.settings.wunsch = 3
+offnen()
+assert(symbolVon(2840) == "Interface\\Icons\\INV_Box_01", "woanders (bei Hilda): " .. tostring(symbolVon(2840)))
+local symbole = {}
+for _, st in ipairs({ "tasche", "gruen", "blau", "gelb", "rot" }) do
+    local t = f.rechts.bereit.rauten[st].texture
+    assert(t and not symbole[t], "Symbol doppelt oder fehlt: " .. st)
+    symbole[t] = true
+end
+GetFileIDFromPath = function() return nil end -- Grafik im Spiel nicht vorhanden
+d.settings.wunsch = 1
+offnen()
+local ersatz, ersatzBreite = symbolVon(2770)
+assert(string.find(tostring(ersatz), "WHITE8X8", 1, true) and ersatzBreite == 8, "Rueckfall fehlt: " .. tostring(ersatz))
+GetFileIDFromPath = nil
+
 -- Altes Wunschrezept von Hilda (Wunsch gilt fuer alle Charaktere): bleibt still, kein Hinweis
 d.settings.wunsch = 2
 offnen()

@@ -1527,6 +1527,44 @@ local function Faerben(t, status)
     t:SetVertexColor(rgb[1], rgb[2], rgb[3], 1)
 end
 
+-- Verfuegbarkeit als Bildsymbol (ab 1.4.1): jeder Zustand sieht anders aus, nicht nur die Farbe.
+-- Nur Grafiken aus dem Spielclient; fehlt eine, erscheint die farbige Raute.
+K.SYMBOLE = {
+    tasche = "Interface\\Icons\\INV_Misc_Bag_08",
+    gruen = "Interface\\Icons\\INV_Box_01",
+    blau = "Interface\\Icons\\INV_Letter_15",
+    gelb = K.ICON_TITEL,
+    rot = "Interface\\RaidFrame\\ReadyCheck-NotReady",
+}
+
+function K.SymbolSetzen(t, status, groesse)
+    local pfad = K.SYMBOLE[status]
+    if pfad and GetFileIDFromPath and not GetFileIDFromPath(pfad) then
+        pfad = nil
+    end
+    if pfad then
+        t:SetTexture(pfad)
+        t:SetSize(groesse, groesse)
+        t:SetVertexColor(1, 1, 1, 1)
+        if status == "rot" then
+            t:SetTexCoord(0, 1, 0, 1)
+        else
+            t:SetTexCoord(0.08, 0.92, 0.08, 0.92) -- Rand der Spiel-Symbole abschneiden
+        end
+        if t.SetRotation then
+            pcall(t.SetRotation, t, 0)
+        end
+    else
+        t:SetTexture(K.WEISS)
+        t:SetSize(8, 8)
+        t:SetTexCoord(0, 1, 0, 1)
+        if t.SetRotation then
+            pcall(t.SetRotation, t, math.pi / 4)
+        end
+        Faerben(t, status)
+    end
+end
+
 local function IstZu(schluessel)
     local zu = GuildERPData.settings.zu
     return zu and zu[schluessel] == true or false
@@ -1760,7 +1798,7 @@ local function ZeileBauen(eltern)
     z.linie:SetColorTexture(1, 1, 1, 0.06)
     z.knopf = z:CreateTexture(nil, "ARTWORK")
     z.knopf:SetSize(12, 12)
-    z.punktGlanz = Raute(z, 15)
+    z.punktGlanz = Raute(z, 22)
     z.punktGlanz:SetDrawLayer("BORDER")
     z.punktGlanz:SetBlendMode("ADD")
     z.punktGlanz:SetVertexColor(K.STATUS_RGB.tasche[1], K.STATUS_RGB.tasche[2], K.STATUS_RGB.tasche[3], 0.35)
@@ -1866,7 +1904,7 @@ local function ZeileZeigen(f, zeile, tiefe, schluessel, fraktion)
     z.knopf:ClearAllPoints()
     z.knopf:SetPoint("TOPLEFT", x, -12)
     z.punkt:ClearAllPoints()
-    z.punkt:SetPoint("TOPLEFT", x + 18, -14)
+    z.punkt:SetPoint("TOPLEFT", x + 15, -(6 + iconGr / 2 - 7))
     z.punktGlanz:ClearAllPoints()
     z.punktGlanz:SetPoint("CENTER", z.punkt, "CENTER", 0, 0)
     z.punktGlanz:SetShown(tasche)
@@ -1901,7 +1939,7 @@ local function ZeileZeigen(f, zeile, tiefe, schluessel, fraktion)
     else
         z.knopf:Hide()
     end
-    Faerben(z.punkt, farbe)
+    K.SymbolSetzen(z.punkt, farbe, 14)
     z.icon:SetTexture(ItemIcon(zeile.itemID) or K.ICON_UNBEKANNT)
     local name = ItemName(zeile.itemID)
     z.name:SetText(name or Farbe("9a9384", "Name wird geladen …"))
@@ -2304,7 +2342,7 @@ local function FensterBauen()
     bereit.rauten = {}
     for _, st in ipairs(K.ZAEHLER) do
         local r = Raute(bereit, 7)
-        Faerben(r, st)
+        K.SymbolSetzen(r, st, 12)
         local t = Schrift(bereit, "GameFontHighlightSmall")
         t:SetTextColor(K.GEDAEMPFT[1], K.GEDAEMPFT[2], K.GEDAEMPFT[3])
         t:SetPoint("LEFT", r, "RIGHT", 5, 0)
@@ -2892,7 +2930,7 @@ local function AuftragZeigen(f, fraktion, rezepte)
                     if vorher then
                         b.rauten[st]:SetPoint("LEFT", vorher, "RIGHT", 14, 0)
                     else
-                        b.rauten[st]:SetPoint("TOPLEFT", 3, -25)
+                        b.rauten[st]:SetPoint("TOPLEFT", 3, -23)
                     end
                     vorher = b.zaehler[st]
                 end
@@ -5400,11 +5438,11 @@ function P.AnsichtZeigen(f)
             z.leit:SetShown(tiefe > 1)
             z.leitQuer:SetShown(tiefe > 1 and not schluessel)
             z.punkt:ClearAllPoints()
-            z.punkt:SetPoint("TOPLEFT", x, -10)
-            Faerben(z.punkt, farbe)
+            z.punkt:SetPoint("TOPLEFT", x, -7)
+            K.SymbolSetzen(z.punkt, farbe, 14)
             z.zahl:SetText(Farbe(K.STATUS_HEX[farbe], zeile.da) .. Farbe("77715f", " / " .. zeile.bedarf))
             z.name:ClearAllPoints()
-            z.name:SetPoint("TOPLEFT", x + 16, -7)
+            z.name:SetPoint("TOPLEFT", x + 18, -7)
             z.name:SetPoint("RIGHT", z.zahl, "LEFT", -8, 0)
             z.name:SetText(ItemName(zeile.itemID) or Farbe("9a9384", "Name wird geladen …"))
             z.info:ClearAllPoints()
@@ -5493,7 +5531,7 @@ function P.NetzBauen()
     for _, e in ipairs({ { "tasche", "in deiner Tasche" }, { "gruen", "woanders da" }, { "blau", "zugesagt" },
         { "gelb", "herstellbar" }, { "rot", "fehlt" } }) do
         local r = Raute(n, 7)
-        Faerben(r, e[1])
+        K.SymbolSetzen(r, e[1], 12)
         if vorher then
             r:SetPoint("LEFT", vorher, "RIGHT", 16, 0)
         else
@@ -8411,11 +8449,11 @@ function Kat.BaumZeigen(R, rid, zutaten, menge, alle)
         z.leit:SetPoint("BOTTOMLEFT", x - 28, 0)
         z.leit:SetShown(tiefe > 1)
         z.punkt:ClearAllPoints()
-        z.punkt:SetPoint("TOPLEFT", x, -9)
-        Faerben(z.punkt, st)
+        z.punkt:SetPoint("TOPLEFT", x, -6)
+        K.SymbolSetzen(z.punkt, st, 14)
         z.zahl:SetText(Farbe(K.STATUS_HEX[st], math.min(hab, 99999)) .. Farbe("77715f", " / " .. noetig))
         z.name:ClearAllPoints()
-        z.name:SetPoint("TOPLEFT", x + 16, -5)
+        z.name:SetPoint("TOPLEFT", x + 18, -5)
         z.name:SetPoint("RIGHT", z.zahl, "LEFT", -8, 0)
         z.name:SetText(ItemName(itemID) or Farbe("9a9384", "Name wird geladen …"))
         local zeilen = { #orte > 0 and table.concat(orte, "  ·  ") or "Du hast keine." }

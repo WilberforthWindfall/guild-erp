@@ -5,13 +5,13 @@ Was macht das Add-on?
 Links im Fenster ist dein Rezeptbuch, rechts der Herstellauftrag.
 Du wählst links ein Rezept, zum Beispiel einen Gürtel. Rechts siehst du dann die
 Stückliste: welche Zutaten du brauchst, und bei Zutaten, die man selbst herstellen
-kann, auch deren Zutaten. Eine farbige Raute zeigt dir sofort den Stand:
+kann, auch deren Zutaten. Ein kleines Symbol zeigt dir sofort den Stand:
 
-  leuchtend grün = liegt in deiner Tasche (der Charakter, mit dem du spielst)
-  grün = da, aber woanders (Bank oder anderer Charakter)
-  gelb = kann einer deiner Charaktere herstellen
-  blau = jemand aus deiner Gruppe hat zugesagt, es zu liefern (nur bei Planaufträgen)
-  rot  = fehlt (wenn bekannt: welcher Händler es verkauft)
+  Tasche = liegt in deiner Tasche (der Charakter, mit dem du spielst)
+  Truhe = da, aber woanders (Bank oder anderer Charakter)
+  Hammer = kann einer deiner Charaktere herstellen
+  Brief = jemand aus deiner Gruppe hat zugesagt, es zu liefern (nur bei Planaufträgen)
+  rotes Kreuz = fehlt (wenn bekannt: welcher Händler es verkauft)
 
 Rechts in jeder Zeile steht "da / nötig", zum Beispiel 0 / 2.
 Gezählt werden alle deine eigenen Charaktere derselben Fraktion.
@@ -207,3 +207,5 @@ Neu in 1.4 – Guild ERP braucht den Reiseführer nicht mehr:
 
 Neu in 1.4.1:
 - Die Werkstatt zeigt nur noch Berufe und Rezepte des gerade gespielten Charakters. Was deine anderen Charaktere können, steht im Katalog. Zutaten bei deinen anderen Charakteren zählen in der Stückliste weiter mit.
+- Der Stand einer Zutat ist jetzt ein Bildsymbol statt einer farbigen Raute: Tasche, Truhe (woanders), Brief (zugesagt), Hammer (herstellbar), rotes Kreuz (fehlt).
+- Die Händler-Angabe bei einer Zutat läuft nicht mehr unter den Knopf "Bestellen".
