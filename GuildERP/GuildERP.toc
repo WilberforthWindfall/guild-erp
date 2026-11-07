@@ -1,8 +1,8 @@
 ## Interface: 16001
 ## Title: Guild ERP
-## Notes: Werkstatt mit Stückliste und Ampel, Bestellungen, Planaufträge und Auktionshaus-Preise, Katalog
+## Notes: Werkstatt mit Stückliste und Ampel, Bestellungen, Planaufträge und Auktionshaus-Preise mit Gewinnrechnung, Katalog
 ## Author: Barlor Rostbart
-## Version: 1.4.1 (Beta)
+## Version: 1.5 (Beta)
 ## OptionalDeps: ForeverDashboard
 ## SavedVariables: GuildERPData
 
