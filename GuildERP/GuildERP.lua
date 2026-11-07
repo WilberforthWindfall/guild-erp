@@ -1,4 +1,4 @@
--- Guild ERP 1.4.1 (Beta)
+-- Guild ERP 1.5.0 (Beta)
 -- Werkstatt: links das Rezeptbuch (Handwerk waehlen, suchen), rechts der Herstellauftrag mit
 -- mehrstufiger Stueckliste und Ampel, ob alles da ist.
 -- Liest ausschliesslich ueber die normale Add-on-Schnittstelle (nur lesend) und speichert
@@ -23,7 +23,7 @@
 local ADDON_TITEL = "|cffd4af37Guild ERP|r"
 local frame = CreateFrame("Frame")
 local K = {} -- Konstanten (spart Platz fuer lokale Namen)
-K.VERSION = "1.4.1"
+K.VERSION = "1.5.0"
 K.ICON_UNBEKANNT = "Interface\\Icons\\INV_Misc_QuestionMark"
 K.ICON_TITEL = "Interface\\Icons\\Trade_BlackSmithing"
 K.ICON_REZEPT = "Interface\\Icons\\INV_Scroll_03"
@@ -5769,7 +5769,7 @@ end
 -- Gemerkt werden je Zutat der guenstigste Preis und der Durchschnitt der Angebote
 -- (Angebote ueber dem Dreifachen des guenstigsten zaehlen nicht mit).
 -- Es wird nichts gekauft, geboten oder eingestellt. Sucht der Spieler selbst, macht
--- Guild ERP Pause. Preise werden NICHT an andere gesendet.
+-- Guild ERP Pause. Seit 1.4 werden gelesene Preise geteilt (Option "teilen"). Seit 1.5 zuerst Komplett-Abfrage, siehe unten.
 -- ---------------------------------------------------------------------------
 K.AH_TAKT = 1.0          -- Sekunden zwischen zwei Suchen
 K.AH_WARTEN = 4          -- Sekunden, die auf eine Antwort gewartet wird
@@ -5936,8 +5936,164 @@ function A.Start()
     A.gestoppt, A.blockiert, A.warteAuf = false, false, nil
     A.FensterZeigen()
     if A.laeuft then
-        O.Nach(1.5, A.Takt)
+        if A.KomplettMoeglich() then
+            O.Nach(0.5, A.KomplettStart)
+        else
+            O.Nach(1.5, A.Takt)
+        end
     end
+end
+
+-- ----- Komplett-Abfrage (ab 1.5, Vorbild: Auctioneer) -----
+-- Eine einzige Anfrage holt alle Angebote des Auktionshauses (C_AuctionHouse.ReplicateItems).
+-- Das Spiel erlaubt das hoechstens alle 15 Minuten je Account. Gelesen wird in kleinen
+-- Portionen je Bild, damit nichts ruckelt; Angebote ohne fertige Daten werden spaeter
+-- noch einmal gelesen. Klappt etwas nicht (Funktion fehlt, gesperrt, keine Antwort,
+-- leere Liste), sucht Guild ERP wie bisher einzeln (A.Takt). Nur lesen, nichts kaufen.
+K.AH_KOMPLETT_SPERRE = 15 * 60 + 10 -- Sekunden zwischen zwei Komplett-Abfragen (Account)
+K.AH_KOMPLETT_WARTEN = 20           -- Sekunden, die auf die Antwort gewartet wird
+K.AH_KOMPLETT_MS = 8                -- Millisekunden Lesezeit je Bild
+K.AH_KOMPLETT_JE_BILD = 2000        -- hoechstens so viele Angebote je Bild
+K.AH_KOMPLETT_NACH = 3              -- Nachlese-Durchgaenge fuer unfertige Angebote
+
+function A.KomplettMoeglich()
+    local c = C_AuctionHouse
+    if A.komplettAus or not (c and c.ReplicateItems and c.GetNumReplicateItems and c.GetReplicateItemInfo) then
+        return false
+    end
+    return time() - (Daten().ahKomplett or 0) >= K.AH_KOMPLETT_SPERRE
+end
+
+function A.KomplettStart()
+    if not A.laeuft or A.gestoppt or A.blockiert then
+        return
+    end
+    A.komplettNr = (A.komplettNr or 0) + 1
+    local nr = A.komplettNr
+    A.komplett, A.ks = "warten", nil
+    A.eigeneSuche = true
+    local ok = pcall(C_AuctionHouse.ReplicateItems)
+    A.eigeneSuche = false
+    if not ok then
+        A.komplettAus = true
+        A.Rueckfall()
+        return
+    end
+    Daten().ahKomplett = time()
+    A.FensterZeigen()
+    O.Nach(K.AH_KOMPLETT_WARTEN, function()
+        if A.komplett == "warten" and A.komplettNr == nr then
+            -- keine Antwort: in dieser Sitzung nicht noch einmal versuchen
+            A.komplettAus = true
+            A.Rueckfall()
+        end
+    end)
+end
+
+-- zurueck zur Einzelsuche
+function A.Rueckfall()
+    A.komplett, A.ks = nil, nil
+    A.FensterZeigen()
+    if A.laeuft then
+        O.Nach(1, A.Takt)
+    end
+end
+
+-- Antwort ist da: Lesen vorbereiten
+function A.KomplettAntwort()
+    if A.komplett ~= "warten" or not A.laeuft then
+        return
+    end
+    local n = C_AuctionHouse.GetNumReplicateItems() or 0
+    if n <= 0 then
+        A.Rueckfall()
+        return
+    end
+    local gesucht = {}
+    for _, id in ipairs(A.schlange) do
+        gesucht[id] = true
+    end
+    A.komplett = "lesen"
+    A.ks = { n = n, pos = 0, anzahl = n, liste = nil, offen = {}, durchgang = 0,
+        gesucht = gesucht, angebote = {}, nr = A.komplettNr }
+    A.FensterZeigen()
+    O.Nach(0, A.KomplettSchritt)
+end
+
+-- ein Angebot lesen; false = Daten noch nicht fertig
+function A.KomplettEintrag(s, index)
+    local _, _, menge, _, _, _, _, _, _, sofort, _, _, _, _, _, _, itemID, fertig =
+        C_AuctionHouse.GetReplicateItemInfo(index)
+    if not itemID then
+        return false
+    end
+    if not s.gesucht[itemID] then
+        return true
+    end
+    if not sofort and fertig == false then
+        return false
+    end
+    menge = math.max(1, menge or 1)
+    if sofort and sofort > 0 then
+        -- Sofortkauf gilt fuer den ganzen Stapel: Preis je Stueck
+        s.angebote[itemID] = s.angebote[itemID] or {}
+        table.insert(s.angebote[itemID], { math.floor(sofort / menge + 0.5), menge })
+    end
+    return true
+end
+
+function A.KomplettSchritt()
+    local s = A.ks
+    if not s or A.komplett ~= "lesen" or s.nr ~= A.komplettNr then
+        return
+    end
+    if not A.laeuft or A.gestoppt or A.blockiert then
+        A.komplett, A.ks = nil, nil
+        return
+    end
+    local uhr = debugprofilestop
+    local ende = uhr and (uhr() + K.AH_KOMPLETT_MS)
+    local gelesen = 0
+    while s.pos < s.anzahl do
+        s.pos = s.pos + 1
+        local index = s.liste and s.liste[s.pos] or s.pos
+        local ok, fertig = pcall(A.KomplettEintrag, s, index)
+        if not ok or not fertig then
+            table.insert(s.offen, index)
+        end
+        gelesen = gelesen + 1
+        if gelesen >= K.AH_KOMPLETT_JE_BILD or (ende and gelesen % 100 == 0 and uhr() > ende) then
+            break
+        end
+    end
+    if s.pos < s.anzahl then
+        A.FensterZeigen()
+        O.Nach(0, A.KomplettSchritt)
+        return
+    end
+    if #s.offen > 0 and s.durchgang < K.AH_KOMPLETT_NACH then
+        -- unfertige Angebote nach einer Sekunde noch einmal lesen
+        s.durchgang = s.durchgang + 1
+        s.liste, s.offen, s.pos = s.offen, {}, 0
+        s.anzahl = #s.liste
+        A.FensterZeigen()
+        O.Nach(1, A.KomplettSchritt)
+        return
+    end
+    A.KomplettFertig(s)
+end
+
+function A.KomplettFertig(s)
+    A.komplett, A.ks = nil, nil
+    local liste = A.schlange
+    A.schlange = {}
+    for _, id in ipairs(liste) do
+        -- nichts gefunden = nicht im Angebot
+        A.Fertig(id, s.angebote[id] or {})
+    end
+    A.laeuft = false
+    A.FensterZeigen()
+    A.Neu()
 end
 
 function A.Takt()
@@ -6055,6 +6211,16 @@ function A.Ereignis(event, ...)
                     pcall(hooksecurefunc, C_AuctionHouse, f, selbst)
                 end
             end
+            -- holt ein anderes Add-on alle Angebote, gilt die 15-Minuten-Sperre auch fuer uns
+            if C_AuctionHouse.ReplicateItems then
+                pcall(hooksecurefunc, C_AuctionHouse, "ReplicateItems", function()
+                    O.Sicher("AH-Beobachtung", function()
+                        if not A.eigeneSuche then
+                            Daten().ahKomplett = time()
+                        end
+                    end)
+                end)
+            end
         end
         local modus = O.Wert("ah")
         if modus == "auto" then
@@ -6069,6 +6235,7 @@ function A.Ereignis(event, ...)
         A.laeuft = false
         A.schlange = {}
         A.warteAuf = nil
+        A.komplett, A.ks = nil, nil
         if A.fenster then
             A.fenster:Hide()
         end
@@ -6082,6 +6249,9 @@ function A.Ereignis(event, ...)
             A.Fertig(itemID, ok and angebote or nil)
             A.FensterZeigen()
         end
+        return true
+    elseif event == "REPLICATE_ITEM_LIST_UPDATE" then
+        A.KomplettAntwort()
         return true
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         local addon = ...
@@ -6160,6 +6330,8 @@ function A.FensterZeigen()
         w.text:SetText("Preise holst du hier per Knopf. Guild ERP sucht dann nacheinander nach den Zutaten deiner Rezepte.")
     elseif A.blockiert then
         w.text:SetText("Das Spiel hat die Preissuche gestoppt. Guild ERP sucht in dieser Sitzung nicht weiter.")
+    elseif A.laeuft and A.komplett then
+        w.text:SetText("Ich lese das ganze Auktionshaus auf einmal. Das geht schnell. Gekauft wird nichts.")
     elseif A.laeuft then
         w.text:SetText("Ich schaue nach, was die Zutaten deiner Rezepte kosten. Gekauft wird nichts.")
     elseif A.gesamt == 0 then
@@ -6167,7 +6339,18 @@ function A.FensterZeigen()
     else
         w.text:SetText("Fertig. Die Preise siehst du in der Werkstatt, in den Planaufträgen und bei den Bestellungen.")
     end
-    if A.laeuft and A.pauseBis and jetzt < A.pauseBis then
+    local ks = A.ks
+    if A.laeuft and A.komplett == "warten" then
+        w.stand:SetText("Warte auf das Auktionshaus …")
+        w.rest:SetText("")
+    elseif A.laeuft and A.komplett == "lesen" and ks then
+        if ks.durchgang > 0 then
+            w.stand:SetText("Lese " .. ks.anzahl .. " Angebote nach")
+        else
+            w.stand:SetText(ks.pos .. " von " .. ks.n .. " Angeboten")
+        end
+        w.rest:SetText("")
+    elseif A.laeuft and A.pauseBis and jetzt < A.pauseBis then
         w.stand:SetText("Pause")
         w.rest:SetText("du suchst gerade selbst")
     elseif A.laeuft then
@@ -6183,6 +6366,9 @@ function A.FensterZeigen()
         w.rest:SetText("")
     end
     local anteil = A.gesamt > 0 and (A.fertig / A.gesamt) or 1
+    if A.laeuft and A.komplett then
+        anteil = (A.komplett == "lesen" and ks and ks.durchgang == 0) and (ks.pos / math.max(1, ks.n)) or 0
+    end
     local breite = (w.balkenHg:GetWidth() or 268)
     if breite <= 0 then
         breite = 268
@@ -9370,7 +9556,7 @@ for _, e in ipairs({ "TRADE_SHOW", "MAIL_SHOW", "MAIL_INBOX_UPDATE", "MAIL_CLOSE
     pcall(frame.RegisterEvent, frame, e)
 end
 for _, e in ipairs({ "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "COMMODITY_SEARCH_RESULTS_UPDATED",
-    "ITEM_SEARCH_RESULTS_UPDATED", "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN" }) do
+    "ITEM_SEARCH_RESULTS_UPDATED", "REPLICATE_ITEM_LIST_UPDATE", "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN" }) do
     pcall(frame.RegisterEvent, frame, e)
 end
 
