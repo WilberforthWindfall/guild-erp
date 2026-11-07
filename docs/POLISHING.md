@@ -49,7 +49,7 @@ Details, Regeln, Entscheidungen und Versionsgeschichte: `docs/KONZEPT.md`.
 ## 5. Noch nicht im Spiel geprüft
 - Seit 1.4 (am 5.11.2026 freigegeben, 1.4.1 am selben Tag): Lehrer sammeln, Werkstatt je Charakter und Symbole sind im Spiel bestätigt. Noch offen: Rezepte beim Händler und als Beute, Teilen von Fundorten und Preisen zwischen zwei echten Spielern, Teilen in einer großen Gilde, Fehlerschutz bei einem echten Fehler, Erkennung weiterer Berufsstufen (bisher nur „Kochgeselle“ gesehen).
 - Auktionshaus-Preise (seit 0.8) – zuletzt im Spiel gesehen, aber nicht systematisch getestet.
-- 1.5: Komplett-Abfrage (ReplicateItems) nur in der Sim (sim27) getestet. Im Spiel pruefen: kommt eine Antwort, und stimmt der Preis je Stueck (Annahme: Sofortkauf gilt fuer den ganzen Stapel)? Vergleich mit dem Preis aus der normalen Suche im Auktionshaus.
+- 1.6: Komplett-Abfrage (ReplicateItems) nur in der Sim (sim27) getestet. Im Spiel pruefen: kommt eine Antwort, und stimmt der Preis je Stueck (Annahme: Sofortkauf gilt fuer den ganzen Stapel)? Vergleich mit dem Preis aus der normalen Suche im Auktionshaus.
 - Guild-Found (1.3): Kommt das Flüstern an (Vor- + Nachname)? Klappt `CancelTrade` ohne Fehlermeldung? Post-Liste neben dem Briefkasten.
 - Spiel-Look in allen Ansichten, Reiter-Reihenfolge, Planauftrag-Bereich anderer Charaktere (1.2), Fraktionstrennung (1.2.1).
 

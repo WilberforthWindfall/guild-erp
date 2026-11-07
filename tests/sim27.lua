@@ -1,4 +1,4 @@
--- 1.5 Komplett-Abfrage des Auktionshauses (ReplicateItems) mit Rueckfall auf Einzelsuche
+-- 1.6 Komplett-Abfrage des Auktionshauses (ReplicateItems) mit Rueckfall auf Einzelsuche
 -- lua51 sim27.lua <GuildERP.lua> <GuildERP-SV>
 dofile((arg[0]:gsub("sim27%.lua$", "")) .. "stubs.lua")
 GetItemInfo = nil

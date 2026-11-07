@@ -35,7 +35,7 @@ Stand 17.10. (Nutzer): „Funktional bin ich hoch zufrieden. Jetzt gehts um den 
 ## Technischer Hintergrund WoW Forever
 - Retail-Client (12.x-API, Mainline-UI, C_AuctionHouse), Start 4.11.2026. Midnight-Add-on-Beschränkungen gelten. Berufefenster = retail ProfessionsFrame mit Forever-Grafiken. Beta-Interface-Nummer 16001 (Live prüfen!).
 - Skill-Linien in Forever sind Unter-Linien (z. B. Schmiedekunst 2938, Verzauberkunst 2940) → Berufe zusätzlich über den Namen erkennen (Kat.BERUF_NAME).
-- AH: seit 1.5 zuerst ReplicateItems (ganzes AH in einer Anfrage, max. alle 15 Min. je Account, Vorbild Auctioneer, Zeitpunkt in GuildERPData.ahKomplett); Rueckfall: SendSearchQuery je Zutat (max. 100/Minute).
+- AH: seit 1.6 zuerst ReplicateItems (ganzes AH in einer Anfrage, max. alle 15 Min. je Account, Vorbild Auctioneer, Zeitpunkt in GuildERPData.ahKomplett); Rueckfall: SendSearchQuery je Zutat (max. 100/Minute).
 - Rezept-ID = Zauber-ID. GetRecipeSchematic liefert auch für fremde Rezepte Zutaten (bestätigt).
 - NAMEN: Pflicht-Vor- und Nachnamen, eindeutig nur die Kombination; UnitName = Vorname, CHAT_MSG_ADDON-Absender = voller Name; eigene Add-on-Nachrichten kommen als Echo zurück. Offen: ob Flüstern an GetUnitName("NPC", true) im Spiel ankommt (Guild-Found-Antwort).
 - Spielschrift kennt keine Symbole wie ◆ ✓ → Texturen. „ScrollFrameTemplate“ statt alter Scrollleiste. Deckende Hintergründe gegen durchscheinende Namensplaketten.

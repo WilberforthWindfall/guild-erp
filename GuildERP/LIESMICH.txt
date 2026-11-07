@@ -1,4 +1,4 @@
-Guild ERP 1.5.0 (Beta)
+Guild ERP 1.6.0 (Beta)
 ====================
 
 Was macht das Add-on?
@@ -210,5 +210,11 @@ Neu in 1.4.1:
 - Der Stand einer Zutat ist jetzt ein Bildsymbol statt einer farbigen Raute: Tasche, Truhe (woanders), Brief (zugesagt), Hammer (herstellbar), rotes Kreuz (fehlt).
 - Die Händler-Angabe bei einer Zutat läuft nicht mehr unter den Knopf "Bestellen".
 
-Neu in 1.5.0:
+Neu in 1.5:
+- Verkaufspreis: Oben auf der Rezept-Karte steht, was das fertige Stück im Auktionshaus kostet (ab … · Schnitt …) und was ein Händler dafür zahlt. Guild ERP sucht das Endprodukt jetzt mit, wenn du das Auktionshaus öffnest.
+- "Lohnt sich das?": Ein grüner Kasten rechnet Verkaufspreis minus 5 % Auktionshaus-Gebühr minus Zutaten (günstigster Preis aus Auktionshaus oder Händler). Unten steht der Gewinn, grün oder rot. Fehlt für eine Zutat ein Preis, steht "ohne Preis: …" und "Gewinn höchstens".
+- Im Rezeptbuch steht rechts der Gewinn je Stück, sobald alle Preise bekannt sind. Sonst wie bisher, wer es herstellen kann.
+- Neuer Knopf "Herstellen" unter "Vormerken": Liegt alles in deiner Tasche, stellt ein Klick die eingestellte Anzahl her – genau wie der Knopf im Berufefenster. Ist das Berufefenster zu, öffnet der erste Klick es, der zweite stellt her. Ein Klick ist immer genau ein Herstellauftrag; Guild ERP stellt nie von allein her und hat keine Warteschlange.
+
+Neu in 1.6.0:
 - Auktionshaus-Preise viel schneller: Guild ERP liest jetzt das ganze Auktionshaus mit einer einzigen Anfrage (wie das Add-on Auctioneer) und sucht nicht mehr jede Zutat einzeln. Das Spiel erlaubt das höchstens alle 15 Minuten. Klappt es nicht oder ist es gerade gesperrt, sucht Guild ERP wie bisher nacheinander. Gekauft wird weiterhin nichts.

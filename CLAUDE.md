@@ -7,6 +7,7 @@ Dauerhafte Hinweise für Claude Code in diesem Repository. Ausführliche Überga
 - **Nur lesen, keine Automatisierung**: nichts automatisch kaufen, verkaufen, bieten, einstellen, verschicken, herstellen.
 - Einzige Ausnahmen:
   1. Knopf „Im Berufefenster öffnen“ (öffnet, wählt Rezept, trägt Anzahl ein – **Herstellen klickt der Spieler**).
+  1b. Seit 1.5 (vom Nutzer erlaubt): Knopf „Herstellen“ in der Werkstatt – **ein Klick = ein Herstellauftrag** mit der eingestellten Anzahl, wie der Knopf im Berufefenster; nur eigener Charakter, nur wenn alles in der Tasche ist, keine Warteschlange, nichts von allein.
   2. Option **Guild-Found**: fremden Handel per `CancelTrade` schließen + **einmal** freundlich flüstern (max. 1×/5 Min. je Spieler, nie im Kampf).
 - Auktionshaus: nur suchen/lesen (gedrosselt), nie kaufen/bieten/einstellen. Seit 1.4 (Entscheidung des Nutzers, 5.11.2026) werden gelesene Preise geteilt: nur zwischen Spielern mit Guild ERP, nur gleiche Fraktion, nur selbst gelesene, abschaltbar (Option `teilen`). Ein ausdrückliches Okay von Blizzard dazu liegt nicht vor.
 - Bestellungen/Planaufträge sind nur **Vermerke**. Guild ERP storniert nie etwas bei anderen, es sagt nur Bescheid.

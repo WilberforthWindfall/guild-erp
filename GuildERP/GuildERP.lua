@@ -1,4 +1,4 @@
--- Guild ERP 1.5.0 (Beta)
+-- Guild ERP 1.6.0 (Beta)
 -- Werkstatt: links das Rezeptbuch (Handwerk waehlen, suchen), rechts der Herstellauftrag mit
 -- mehrstufiger Stueckliste und Ampel, ob alles da ist.
 -- Liest ausschliesslich ueber die normale Add-on-Schnittstelle (nur lesend) und speichert
@@ -17,13 +17,16 @@
 -- Stornieren mit Abhaengigkeiten, volle Namen (Vor- und Nachname).
 -- Ab 1.1: Katalog in Gruppen und mit Zutaten-Baum, Knopf an der Minimap, Optionen.
 -- Ab 1.4: merkt sich selbst, wo es noch nicht gelernte Rezepte gibt (Lehrer, Haendler, Beute).
+-- Ab 1.5: Verkaufspreis des Endprodukts und Gewinnrechnung; Knopf "Herstellen" in der Werkstatt
+--         (vom Nutzer erlaubte Ausnahme: EIN Klick = EIN Herstellauftrag, wie im Berufefenster).
+-- Ab 1.6: Auktionshaus-Preise per Komplett-Abfrage (ReplicateItems), Rueckfall Einzelsuche.
 -- Ist der Reiseführer (ForeverDashboard) installiert, liest Guild ERP dessen Rezeptkatalog
 -- zusaetzlich mit. Ohne Reiseführer laeuft alles genauso.
 
 local ADDON_TITEL = "|cffd4af37Guild ERP|r"
 local frame = CreateFrame("Frame")
 local K = {} -- Konstanten (spart Platz fuer lokale Namen)
-K.VERSION = "1.5.0"
+K.VERSION = "1.6.0"
 K.ICON_UNBEKANNT = "Interface\\Icons\\INV_Misc_QuestionMark"
 K.ICON_TITEL = "Interface\\Icons\\Trade_BlackSmithing"
 K.ICON_REZEPT = "Interface\\Icons\\INV_Scroll_03"
@@ -749,6 +752,71 @@ local function BerufefensterOeffnen(rezeptID, anzahl)
                 .. (r.name or "das Rezept") .. " aus und trägt " .. anzahl .. " ein.")
         end
     end)
+end
+
+-- ---------------------------------------------------------------------------
+-- Ab 1.5: "Herstellen" direkt aus der Werkstatt (vom Nutzer ausdruecklich erlaubt).
+-- Regeln: nur auf Klick des Spielers, ein Klick = ein Herstellauftrag mit der eingestellten
+-- Anzahl (genau wie der Knopf im Berufefenster). Keine Warteschlange, nichts laeuft von allein.
+-- Das Spiel stellt nur her, wenn das passende Berufefenster offen ist. Ist es zu, oeffnet
+-- der erste Klick das Fenster (wie "Im Berufefenster öffnen"), der naechste stellt her.
+-- ---------------------------------------------------------------------------
+function P.BerufOffen(rezeptID)
+    if Kat.FremdesFenster and Kat.FremdesFenster() then
+        return false
+    end
+    if C_TradeSkillUI and C_TradeSkillUI.GetAllRecipeIDs then
+        local ok, ids = pcall(C_TradeSkillUI.GetAllRecipeIDs)
+        if ok and type(ids) == "table" then
+            for _, id in ipairs(ids) do
+                if id == rezeptID then
+                    return "neu"
+                end
+            end
+        end
+    end
+    if TradeSkillFrame and TradeSkillFrame.IsShown and TradeSkillFrame:IsShown() and GetNumTradeSkills then
+        return "alt"
+    end
+    return false
+end
+
+function P.Herstellen(rezeptID, anzahl)
+    local r = GuildERPData.recipes[rezeptID]
+    if not r then
+        return
+    end
+    if InCombatLockdown and InCombatLockdown() then
+        Melden("Im Kampf kann nichts hergestellt werden.")
+        return
+    end
+    local weg = P.BerufOffen(rezeptID)
+    local d = Daten()
+    if weg == "neu" and C_TradeSkillUI.CraftRecipe then
+        local ok, fehler = pcall(C_TradeSkillUI.CraftRecipe, rezeptID, anzahl)
+        d.diagnostics.herstellen = (ok and "CraftRecipe " or ("Fehler " .. tostring(fehler) .. " ")) .. date("%Y-%m-%d %H:%M")
+        if ok then
+            return
+        end
+    elseif weg == "alt" and DoTradeSkill then
+        if ExpandTradeSkillSubClass then
+            pcall(ExpandTradeSkillSubClass, 0)
+        end
+        for i = 1, (GetNumTradeSkills() or 0) do
+            local name, art = GetTradeSkillInfo(i)
+            if name == r.name and art ~= "header" then
+                local ok, fehler = pcall(DoTradeSkill, i, anzahl)
+                d.diagnostics.herstellen = (ok and "DoTradeSkill " or ("Fehler " .. tostring(fehler) .. " ")) .. date("%Y-%m-%d %H:%M")
+                if ok then
+                    return
+                end
+                break
+            end
+        end
+    end
+    -- Fenster nicht offen (oder anderer Beruf): erst oeffnen, dann noch einmal klicken
+    BerufefensterOeffnen(rezeptID, anzahl)
+    Melden("Das Berufefenster (" .. (r.profession or "") .. ") muss offen sein. Klick gleich noch einmal auf „Herstellen“.")
 end
 
 local rezepteWarten = false
@@ -2263,8 +2331,17 @@ local function FensterBauen()
         end
     end)
     karte.plan:Hide()
+    -- ab 1.5: Herstellen unter Vormerken
+    karte.machen = O.Rahmen("Button", nil, karte, "UIPanelButtonTemplate")
+    karte.machen:SetSize(100, 22)
+    karte.machen:SetPoint("TOPRIGHT", karte.plan, "BOTTOMRIGHT", 0, -4)
+    karte.machen:SetText("Herstellen")
+    karte.machen:SetMotionScriptsWhileDisabled(true)
+    karte.machen:SetScript("OnEnter", karte.plan:GetScript("OnEnter"))
+    karte.machen:SetScript("OnLeave", karte.plan:GetScript("OnLeave"))
+    karte.machen:Hide()
     karte.schild = Schrift(karte, "GameFontHighlightSmall", false)
-    karte.schild:SetPoint("TOPRIGHT", karte.plan, "BOTTOMRIGHT", 0, -5)
+    karte.schild:SetPoint("TOPRIGHT", karte.machen, "BOTTOMRIGHT", 0, -5)
     karte.name = Schrift(karte, "GameFontNormalLarge")
     karte.name:SetPoint("TOPLEFT", karte.rand, "TOPRIGHT", 12, -6)
     karte.name:SetPoint("RIGHT", karte, "RIGHT", -120, 0)
@@ -2272,6 +2349,20 @@ local function FensterBauen()
     karte.unter:SetPoint("TOPLEFT", karte.name, "BOTTOMLEFT", 0, -4)
     karte.unter:SetPoint("RIGHT", karte, "RIGHT", -150, 0)
     karte.unter:SetTextColor(K.GEDAEMPFT[1], K.GEDAEMPFT[2], K.GEDAEMPFT[3])
+    -- ab 1.5: Verkaufspreis des Endprodukts (zwei kurze Zeilen)
+    karte.verkauf = Schrift(karte, "GameFontHighlightSmall")
+    karte.verkauf:SetPoint("TOPLEFT", karte.unter, "BOTTOMLEFT", 0, -5)
+    karte.verkauf:SetPoint("RIGHT", karte, "RIGHT", -136, 0)
+    if karte.verkauf.SetWordWrap then
+        karte.verkauf:SetWordWrap(false)
+    end
+    karte.haendler = Schrift(karte, "GameFontHighlightSmall")
+    karte.haendler:SetPoint("TOPLEFT", karte.verkauf, "BOTTOMLEFT", 0, -3)
+    karte.haendler:SetPoint("RIGHT", karte, "RIGHT", -136, 0)
+    if karte.haendler.SetWordWrap then
+        karte.haendler:SetWordWrap(false)
+    end
+    karte.haendler:SetTextColor(K.GEDAEMPFT[1], K.GEDAEMPFT[2], K.GEDAEMPFT[3])
     karte:EnableMouse(true)
     karte:SetScript("OnEnter", function(self)
         if self.itemID and GameTooltip then
@@ -2288,8 +2379,8 @@ local function FensterBauen()
 
     -- Auftrag: wer stellt her, wie viele
     local auftrag = O.Rahmen("Frame", nil, karte)
-    auftrag:SetPoint("TOPLEFT", 10, -64)
-    auftrag:SetPoint("TOPRIGHT", -10, -64)
+    auftrag:SetPoint("TOPLEFT", 10, -86)
+    auftrag:SetPoint("TOPRIGHT", -10, -86)
     auftrag:SetHeight(54)
     R.auftrag = auftrag
     auftrag.linie = auftrag:CreateTexture(nil, "ARTWORK")
@@ -2411,6 +2502,39 @@ local function FensterBauen()
         end
     end
     R.hinweis = hinweis
+
+    -- ab 1.5: "Lohnt sich das?" ueber dem Hinweis-Kasten
+    local gew = O.Rahmen("Frame", nil, R, K.BACKDROP_VORLAGE)
+    gew:SetPoint("BOTTOMLEFT", hinweis, "TOPLEFT", 0, 8)
+    gew:SetPoint("BOTTOMRIGHT", hinweis, "TOPRIGHT", 0, 8)
+    gew:SetHeight(96)
+    Flaeche(gew, { 0.10, 0.12, 0.09, 1 }, { 0.18, 0.29, 0.16, 1 })
+    gew.titel = Schrift(gew, "GameFontNormal")
+    gew.titel:SetPoint("TOPLEFT", 10, -8)
+    gew.titel:SetPoint("RIGHT", -10, 0)
+    gew.links, gew.rechts = {}, {}
+    for i = 1, 4 do
+        local l = Schrift(gew, i == 4 and "GameFontHighlight" or "GameFontHighlightSmall")
+        l:SetPoint("TOPLEFT", 10, -10 - 16 * i)
+        l:SetPoint("RIGHT", -120, 0)
+        if l.SetWordWrap then
+            l:SetWordWrap(false) -- zu lang: mit "…" kuerzen, nie in die naechste Zeile
+        end
+        if i < 4 then
+            l:SetTextColor(0.72, 0.67, 0.55)
+        end
+        local r = Schrift(gew, i == 4 and "GameFontHighlight" or "GameFontHighlightSmall", false)
+        r:SetPoint("TOPRIGHT", -10, -10 - 16 * i)
+        r:SetWidth(108)
+        gew.links[i], gew.rechts[i] = l, r
+    end
+    gew.linie = gew:CreateTexture(nil, "ARTWORK")
+    gew.linie:SetHeight(1)
+    gew.linie:SetPoint("TOPLEFT", 10, -10 - 16 * 4 + 2)
+    gew.linie:SetPoint("TOPRIGHT", -10, -10 - 16 * 4 + 2)
+    gew.linie:SetColorTexture(0.18, 0.29, 0.16, 1)
+    gew:Hide()
+    R.gewinn = gew
 
     -- Nicht gelerntes Rezept: wo man es lernt
     local lernen = O.Rahmen("Frame", nil, R, K.BACKDROP_VORLAGE)
@@ -2757,7 +2881,13 @@ local function RezeptbuchZeigen(f, fraktion, rezepte, berufe)
             zeile({
                 wert = e.id, text = Farbe(hex, e.r.name or "?"),
                 icon = ItemIcon(e.r.itemID) or e.r.icon, itemID = e.r.itemID,
-                rechts = wer[1] .. (#wer > 1 and (" +" .. (#wer - 1)) or ""),
+                rechts = (function()
+                    local g = A.Gewinn(e.id, 1)
+                    if g and #g.ohne == 0 then
+                        return A.GewinnText(math.floor(g.gewinn / math.max(1, g.stueck) + 0.5))
+                    end
+                    return wer[1] .. (#wer > 1 and (" +" .. (#wer - 1)) or "")
+                end)(),
                 gewaehlt = wunsch == e.id, einzug = 22,
             })
         end)
@@ -2802,6 +2932,13 @@ local function KarteSetzen(karte, icon, name, hex, unter, q, itemID)
     karte.name:SetText(Farbe(hex, name))
     karte.unter:SetText(unter or "")
     karte.itemID = itemID
+    if karte.verkauf then
+        karte.verkauf:SetText("")
+        karte.haendler:SetText("")
+    end
+    if karte.machen then
+        karte.machen:Hide()
+    end
 end
 
 local function AuftragZeigen(f, fraktion, rezepte)
@@ -2876,7 +3013,22 @@ local function AuftragZeigen(f, fraktion, rezepte)
             local q = ItemQualitaet(r.itemID)
             KarteSetzen(R.karte, ItemIcon(r.itemID) or r.icon, r.name, K.QUALITAET_HEX[q or 1] or "ffffff",
                 (r.profession or "") .. ((r.numMade or 1) > 1 and (".  " .. r.numMade .. " Stück je Herstellung") or ""), q, r.itemID)
-            R.karte:SetHeight(124)
+            R.karte:SetHeight(146)
+            if r.itemID and r.itemID > 0 then
+                local p = A.Preis(r.itemID)
+                if p and p.leer then
+                    R.karte.verkauf:SetText(Farbe("8a7a52", "Verkauf AH:") .. Farbe("8a8578", " nicht im Angebot"))
+                elseif p then
+                    R.karte.verkauf:SetText(Farbe("8a7a52", "Verkauf AH:") .. Farbe("c9b88a", " ab ") .. A.Muenzen(p.min)
+                        .. Farbe("c9b88a", " · Schnitt ") .. A.Muenzen(p.avg))
+                else
+                    R.karte.verkauf:SetText(Farbe("8a7a52", "Verkauf AH:") .. Farbe("8a8578", " noch kein Preis"))
+                end
+                local hz = A.HaendlerZahlt(r.itemID)
+                R.karte.haendler:SetText(hz and (Farbe("8a7a52", "Händler zahlt: ") .. A.Muenzen(hz)) or "")
+            else
+                R.karte.verkauf:SetText(Farbe("8a8578", "Verzauberung: kein Verkaufspreis"))
+            end
             R.auftrag:Show()
             local ich = UnitName("player")
             local wer = HerstellerVon(wunsch, info.wer)
@@ -2908,6 +3060,28 @@ local function AuftragZeigen(f, fraktion, rezepte)
             -- Bereitschaft
             local b = R.bereit
             allesTasche = #liste > 0 and zahl.tasche == #liste
+            -- ab 1.5: Knopf "Herstellen" (nur eigener Charakter, nur wenn alles in der Tasche ist)
+            do
+                local m = R.karte.machen
+                local id, n = wunsch, laeufe or 1
+                local selbst = wer == ich
+                m:SetEnabled(allesTasche and selbst)
+                m:SetScript("OnClick", function()
+                    P.Herstellen(id, n)
+                end)
+                if not selbst then
+                    m.tip = { "Herstellen", "Das kann nur " .. (wer or "?") .. ". Mit diesem Charakter einloggen." }
+                elseif allesTasche then
+                    m.tip = { "Herstellen (" .. n .. "×)", "Stellt sofort her, wie der Knopf im Berufefenster. "
+                        .. "Ist das Berufefenster zu, öffnet der erste Klick es – dann noch einmal klicken." }
+                else
+                    m.tip = { "Herstellen", "Geht, sobald alle Zutaten in deiner Tasche sind." }
+                end
+                m:Show()
+                if not plan then
+                    R.karte.schild:SetText(allesTasche and selbst and "" or Farbe("77715f", selbst and "Erst wenn alles da ist" or ("Nur " .. (wer or "?"))))
+                end
+            end
             if allesTasche then
                 b.text:SetText(Farbe(K.STATUS_HEX.tasche, #liste == 1 and "Die Zutat liegt in deiner Tasche"
                     or ("Alle " .. #liste .. " Zutaten in deiner Tasche")))
@@ -2979,7 +3153,7 @@ local function AuftragZeigen(f, fraktion, rezepte)
         if hersteller and hersteller ~= ich then
             table.insert(zeilen, "Herstellen soll " .. hersteller .. ". Gib die Zutaten an " .. hersteller .. " weiter.")
         else
-            table.insert(zeilen, "Herstellen klickst du im Berufefenster selbst.")
+            table.insert(zeilen, "Klick oben auf „Herstellen“ oder stelle im Berufefenster her.")
         end
     elseif stueckliste then
         -- Fehlendes fuer den Bestellschein: Grundzutaten angehakt, Zwischenprodukte als Moeglichkeit
@@ -3151,6 +3325,33 @@ local function AuftragZeigen(f, fraktion, rezepte)
     else
         h:Hide()
         R.scroll:SetPoint("BOTTOMRIGHT", R, "BOTTOMRIGHT", -24, 0)
+    end
+    -- ab 1.5: Gewinnrechnung
+    local gw = R.gewinn
+    local g = zeigeListe and type(wunsch) == "number" and A.Gewinn(wunsch, anzahlLaeufe or 1)
+    if g then
+        gw.titel:SetText("Lohnt sich das? " .. Farbe("9a9384", "(" .. g.laeufe .. "×, alles gekauft)"))
+        gw.links[1]:SetText("Verkauf" .. (g.stueck > 1 and (" (" .. g.stueck .. " Stück)") or "") .. ", günstigstes Angebot")
+        gw.rechts[1]:SetText(A.Muenzen(g.verkauf))
+        gw.links[2]:SetText("− Auktionshaus-Gebühr 5 %")
+        gw.rechts[2]:SetText(Farbe("e0604b", "− ") .. A.Muenzen(g.gebuehr))
+        gw.links[3]:SetText("− Zutaten (" .. table.concat(g.namen, ", ") .. ")"
+            .. (#g.ohne > 0 and (Farbe("e0604b", " ohne Preis: " .. table.concat(g.ohne, ", "))) or ""))
+        gw.rechts[3]:SetText(Farbe("e0604b", "− ") .. A.Muenzen(g.kosten))
+        gw.links[4]:SetText(#g.ohne > 0 and "Gewinn höchstens" or "Gewinn etwa")
+        gw.rechts[4]:SetText(A.GewinnText(g.gewinn))
+        if h:IsShown() then
+            gw:SetPoint("BOTTOMLEFT", h, "TOPLEFT", 0, 8)
+            gw:SetPoint("BOTTOMRIGHT", h, "TOPRIGHT", 0, 8)
+        else
+            gw:SetPoint("BOTTOMLEFT", R, "BOTTOMLEFT", 0, 0)
+            gw:SetPoint("BOTTOMRIGHT", R, "BOTTOMRIGHT", 0, 0)
+        end
+        gw:Show()
+        local unten = (h:IsShown() and (h:GetHeight() + 8) or 0) + gw:GetHeight() + 10
+        R.scroll:SetPoint("BOTTOMRIGHT", R, "BOTTOMRIGHT", -24, unten)
+    else
+        gw:Hide()
     end
 end
 
@@ -5769,7 +5970,7 @@ end
 -- Gemerkt werden je Zutat der guenstigste Preis und der Durchschnitt der Angebote
 -- (Angebote ueber dem Dreifachen des guenstigsten zaehlen nicht mit).
 -- Es wird nichts gekauft, geboten oder eingestellt. Sucht der Spieler selbst, macht
--- Guild ERP Pause. Seit 1.4 werden gelesene Preise geteilt (Option "teilen"). Seit 1.5 zuerst Komplett-Abfrage, siehe unten.
+-- Guild ERP Pause. Seit 1.4 werden gelesene Preise geteilt (Option "teilen"). Seit 1.6 zuerst Komplett-Abfrage, siehe unten.
 -- ---------------------------------------------------------------------------
 K.AH_TAKT = 1.0          -- Sekunden zwischen zwei Suchen
 K.AH_WARTEN = 4          -- Sekunden, die auf eine Antwort gewartet wird
@@ -5890,6 +6091,81 @@ function A.KostenText(liste, tinte)
     return "etwa " .. A.Muenzen(summe, tinte) .. (#ohne > 0 and (" (ohne " .. table.concat(ohne, ", ") .. ")") or "")
 end
 
+-- ----- Ab 1.5: Verkaufspreis und Gewinn -----
+K.AH_GEBUEHR = 0.05 -- Anteil, den das Auktionshaus beim Verkauf einbehaelt
+
+-- was ein Haendler fuer 1 Stueck zahlt (Verkauf an den Haendler) oder nil
+function A.HaendlerZahlt(itemID)
+    if not itemID or itemID == 0 then
+        return nil
+    end
+    local f = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+    if not f then
+        return nil
+    end
+    local ok, _, _, _, _, _, _, _, _, _, _, preis = pcall(f, itemID)
+    if ok and preis and preis > 0 then
+        return preis
+    end
+    return nil
+end
+
+-- guenstigster bekannter Einkaufspreis fuer 1 Stueck: Auktionshaus oder Haendler
+function A.EinkaufStueck(itemID)
+    local best
+    local p = A.Preis(itemID)
+    if p and not p.leer and p.min then
+        best = p.min
+    end
+    for _, v in pairs(GuildERPData.vendors and GuildERPData.vendors[itemID] or {}) do
+        if v.price and v.price > 0 then
+            local je = v.price / math.max(1, v.stack or 1)
+            if not best or je < best then
+                best = je
+            end
+        end
+    end
+    return best
+end
+
+-- Rechnung fuer "laeufe" Herstellungen, alles gekauft. nil, wenn kein Verkaufspreis bekannt ist
+function A.Gewinn(rezeptID, laeufe)
+    local r = GuildERPData.recipes[rezeptID]
+    if not r or not r.itemID or r.itemID == 0 then
+        return nil
+    end
+    local p = A.Preis(r.itemID)
+    if not p or p.leer or not p.min then
+        return nil
+    end
+    laeufe = laeufe or 1
+    local stueck = (r.numMade or 1) * laeufe
+    local verkauf = p.min * stueck
+    local gebuehr = math.floor(verkauf * K.AH_GEBUEHR + 0.5)
+    local kosten, ohne, namen = 0, {}, {}
+    for _, z in ipairs(r.reagents or {}) do
+        local n = (z.count or 1) * laeufe
+        table.insert(namen, n .. " " .. (ItemName(z.itemID) or "?"))
+        local je = A.EinkaufStueck(z.itemID)
+        if je then
+            kosten = kosten + je * n
+        else
+            table.insert(ohne, ItemName(z.itemID) or "?")
+        end
+    end
+    kosten = math.floor(kosten + 0.5)
+    return { verkauf = verkauf, gebuehr = gebuehr, kosten = kosten, gewinn = verkauf - gebuehr - kosten,
+        ohne = ohne, namen = namen, stueck = stueck, laeufe = laeufe }
+end
+
+-- "+1 S 84 K" (gruen) / "-4 K" (rot)
+function A.GewinnText(g)
+    if g >= 0 then
+        return Farbe("5cc46a", "+") .. A.Muenzen(g)
+    end
+    return Farbe("e0604b", "−") .. A.Muenzen(-g)
+end
+
 -- ----- Suchen -----
 A.schlange = {}
 A.gesamt = 0
@@ -5911,6 +6187,11 @@ function A.Zutaten()
                 ids[z.itemID] = true
                 table.insert(liste, z.itemID)
             end
+        end
+        -- ab 1.5 auch das Endprodukt (fuer den Verkaufspreis)
+        if r and r.itemID and r.itemID > 0 and not ids[r.itemID] then
+            ids[r.itemID] = true
+            table.insert(liste, r.itemID)
         end
     end
     table.sort(liste, function(x, y) return (ItemName(x) or "") < (ItemName(y) or "") end)
@@ -5944,7 +6225,7 @@ function A.Start()
     end
 end
 
--- ----- Komplett-Abfrage (ab 1.5, Vorbild: Auctioneer) -----
+-- ----- Komplett-Abfrage (ab 1.6, Vorbild: Auctioneer) -----
 -- Eine einzige Anfrage holt alle Angebote des Auktionshauses (C_AuctionHouse.ReplicateItems).
 -- Das Spiel erlaubt das hoechstens alle 15 Minuten je Account. Gelesen wird in kleinen
 -- Portionen je Bild, damit nichts ruckelt; Angebote ohne fertige Daten werden spaeter
