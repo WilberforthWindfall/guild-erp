@@ -1,4 +1,4 @@
--- Guild ERP 1.6.2 (Beta)
+-- Guild ERP 1.7.0 (Beta)
 -- Werkstatt: links das Rezeptbuch (Handwerk waehlen, suchen), rechts der Herstellauftrag mit
 -- mehrstufiger Stueckliste und Ampel, ob alles da ist.
 -- Liest ausschliesslich ueber die normale Add-on-Schnittstelle (nur lesend) und speichert
@@ -26,7 +26,7 @@
 local ADDON_TITEL = "|cffd4af37Guild ERP|r"
 local frame = CreateFrame("Frame")
 local K = {} -- Konstanten (spart Platz fuer lokale Namen)
-K.VERSION = "1.6.2"
+K.VERSION = "1.7.0"
 K.ICON_UNBEKANNT = "Interface\\Icons\\INV_Misc_QuestionMark"
 K.ICON_TITEL = "Interface\\Icons\\Trade_BlackSmithing"
 K.ICON_REZEPT = "Interface\\Icons\\INV_Scroll_03"
@@ -462,13 +462,23 @@ local function BeutelLesen(liste)
     return inhalt
 end
 
+-- letzter Platz der getragenen Taschen: 4 Taschen + Handwerkstasche = 5
+function K.TaschenLetzte()
+    local n = (NUM_BAG_SLOTS or 4) + (NUM_REAGENTBAG_SLOTS or 1)
+    if NUM_TOTAL_EQUIPPED_BAG_SLOTS and NUM_TOTAL_EQUIPPED_BAG_SLOTS > n then
+        n = NUM_TOTAL_EQUIPPED_BAG_SLOTS
+    end
+    return n
+end
+
 local function TaschenLesen()
     local c = Charakter()
     if not c then
         return
     end
     local liste = {}
-    for b = 0, (NUM_BAG_SLOTS or 4) do
+    -- ab 1.6.3: auch die Handwerkstasche (Platz 5, "Reagent Bag"); fehlt sie, ist das Fach leer (0 Plaetze)
+    for b = 0, K.TaschenLetzte() do
         table.insert(liste, b)
     end
     c.bags = BeutelLesen(liste)
@@ -485,7 +495,10 @@ local function BankLesen()
         return
     end
     local liste = { BANK_CONTAINER or -1 }
-    local erste = (NUM_BAG_SLOTS or 4) + 1
+    if Enum and Enum.BagIndex and Enum.BagIndex.Reagentbank then
+        table.insert(liste, Enum.BagIndex.Reagentbank) -- Material-Bankfach
+    end
+    local erste = K.TaschenLetzte() + 1
     for b = erste, erste + (NUM_BANKBAGSLOTS or 6) - 1 do
         table.insert(liste, b)
     end
@@ -1022,6 +1035,11 @@ local function Aufloesen(itemID, bedarf, pool, hersteller, tiefe, besucht)
         end
     end
     zeile.da = bedarf - rest
+    -- ab 1.6.4: Anzeige "da" = was wirklich vorhanden ist (nicht auf den Bedarf gekappt)
+    zeile.vorrat = 0
+    for _, q in ipairs(pool[itemID] or {}) do
+        zeile.vorrat = zeile.vorrat + (q.n or 0)
+    end
     zeile.inTasche = zeile.inTasche or 0
     if rest <= 0 then
         zeile.rest = 0
@@ -2017,7 +2035,7 @@ local function ZeileZeigen(f, zeile, tiefe, schluessel, fraktion)
     z.icon:SetTexture(ItemIcon(zeile.itemID) or K.ICON_UNBEKANNT)
     local name = ItemName(zeile.itemID)
     z.name:SetText(name or Farbe("9a9384", "Name wird geladen …"))
-    z.zahl:SetText(Farbe(K.STATUS_HEX[farbe], zeile.da) .. Farbe("77715f", " / " .. zeile.bedarf))
+    z.zahl:SetText(Farbe(K.STATUS_HEX[farbe], zeile.vorrat or zeile.da) .. Farbe("77715f", " / " .. zeile.bedarf))
 
     -- Schild "In deiner Tasche"
     local unter = z.name
@@ -3410,13 +3428,16 @@ end
 -- ---------------------------------------------------------------------------
 -- Bestellungen in der Gruppe (Version 0.5)
 -- Eine Bestellung ist nur ein VERMERK: wer braucht was, wer liefert wieviel und wie.
--- Uebergeben (Handel, Post, Gildenbank) macht jeder Spieler selbst.
+-- Uebergeben (Handel, Post) macht jeder Spieler selbst; ab 1.7.0 wird die Lieferung beim Handeln
+-- und Verschicken erkannt und gebucht (nur mit Rueckgaengig, nie ohne Meldung).
 -- Abgleich ueber Add-on-Nachrichten in der Gruppe (PARTY/RAID), gedrosselt:
 -- hoechstens eine Nachricht je 1,2 Sekunden, bei Drosselung 10 Sekunden Pause.
 -- Fremde Daten werden geprueft und gekuerzt, bevor sie gespeichert werden.
 -- ---------------------------------------------------------------------------
 K.PREFIX = "GERP1"
+-- Platz 3 (Gildenbank) bleibt nur fuer alte Bestellungen erhalten und wird nicht mehr angeboten
 K.LIEFERWEGE = { "Direkt handeln", "Per Post", "In die Gildenbank", "Beim Handeln verzaubern" }
+K.WEGWAHL = { 1, 2, 4 }
 K.PERGAMENT = { 0.91, 0.86, 0.74 }
 K.TINTE = { 0.16, 0.13, 0.09 }
 K.TINTE2 = { 0.42, 0.35, 0.25 }
@@ -3465,13 +3486,24 @@ function B.MeineZusage(z)
 end
 
 -- Stand einer Zeile: zugesagt, geliefert, Status-Schluessel
+-- ab 1.7.0: Soll n, gefertigt f, geliefert m (lieferbar = f - m). Alte Eintraege mit "g" = alles geliefert.
+function B.FM(s)
+    local n = s.n or 0
+    local m, f = s.m, s.f
+    if s.g and not m then
+        m = n
+    end
+    m = math.max(0, math.min(m or 0, n))
+    f = math.max(m, math.min(f or 0, n))
+    return n, f, m
+end
+
 function B.ZeilenStand(z)
     local zu, gel = 0, 0
     for _, s in pairs(z.zusagen or {}) do
-        zu = zu + (s.n or 0)
-        if s.g then
-            gel = gel + (s.n or 0)
-        end
+        local n, _, m = B.FM(s)
+        zu = zu + n
+        gel = gel + m
     end
     local st = "offen"
     if gel >= z.n then
@@ -3516,8 +3548,16 @@ function B.AlsText(o)
         local zus = {}
         for wer, s in pairs(z.zusagen or {}) do
             -- ab 1.6.1: Absage mit Grund als 6. Teil (aeltere Versionen ignorieren den Eintrag)
-            table.insert(zus, table.concat({ B.M(wer), s.n or 0, s.weg or 1, s.g and 1 or 0, s.at or 0 }, "/")
-                .. (s.ab and ("/" .. B.M(s.ab)) or ""))
+            -- ab 1.7.0: gefertigt und geliefert als 7. und 8. Teil (aeltere Versionen ignorieren den Eintrag,
+            -- deshalb braucht die Gruppe fuer Teillieferungen die Version 1.7.0)
+            local _, sf, sm = B.FM(s)
+            local text = table.concat({ B.M(wer), s.n or 0, s.weg or 1, s.g and 1 or 0, s.at or 0 }, "/")
+            if sf > 0 or sm > 0 then
+                text = text .. "/" .. (s.ab and B.M(s.ab) or "") .. "/" .. sf .. "/" .. sm
+            elseif s.ab then
+                text = text .. "/" .. B.M(s.ab)
+            end
+            table.insert(zus, text)
         end
         local kopf = z.rezeptID and ("r" .. z.rezeptID .. "." .. (z.itemID or 0)) or z.itemID
         table.insert(zeilen, table.concat({ kopf, z.n, table.concat(zus, ";") }, ":"))
@@ -3566,13 +3606,15 @@ function B.AusText(text)
                 rezeptID = rid and B.Zahl(rid, 4000000000) or nil }
             local anzahl = 0
             for s in string.gmatch(zus or "", "[^;]+") do
-                local wer, sn, weg, g, at, ab = string.match(s, "^([^/]+)/(%d+)/(%d+)/(%d)/(%d+)/?([^/]*)$")
+                local wer, sn, weg, g, at, ab, sf, sm = string.match(s, "^([^/]+)/(%d+)/(%d+)/(%d)/(%d+)/?([^/]*)/?(%d*)/?(%d*)$")
                 if wer and anzahl < 20 then
                     anzahl = anzahl + 1
                     z.zusagen[B.Kurz(B.D(wer), 40)] = {
                         n = B.Zahl(sn, 10000), weg = math.max(1, math.min(#K.LIEFERWEGE, B.Zahl(weg))),
                         g = g == "1", at = B.Zahl(at, 4000000000),
                         ab = (ab and ab ~= "") and B.Kurz(B.D(ab), 80) or nil,
+                        f = (sf and sf ~= "") and B.Zahl(sf, 10000) or nil,
+                        m = (sm and sm ~= "") and B.Zahl(sm, 10000) or nil,
                     }
                 end
             end
@@ -4080,11 +4122,18 @@ function B.Empfangen(text, absender)
                     O.Chat(t)
                     B.Hinweis("ZUSAGE ZURÜCKGENOMMEN", t, "Deine Bestellung ist dafür wieder offen.", o)
                 elseif (m.s.n or 0) > 0 then
-                    O.Merken(m.s.g and "GELIEFERT" or "ZUSAGE", B.Anzeige(m.wer) .. (m.s.g and " hat geliefert: " or " liefert ")
-                        .. m.s.n .. "× " .. m.name)
+                    local sn, sf, sm = B.FM(m.s)
+                    local was
+                    if sm >= sn then
+                        was = " hat geliefert: " .. sn .. "× "
+                    elseif sm > 0 then
+                        was = " hat " .. sm .. " von " .. sn .. " geliefert: "
+                    else
+                        was = " liefert " .. sn .. "× "
+                    end
+                    O.Merken(sm > 0 and "GELIEFERT" or "ZUSAGE", B.Anzeige(m.wer) .. was .. m.name)
                     O.KnopfZeigen()
-                    O.Chat(B.Anzeige(m.wer) .. (m.s.g and " hat geliefert: " or " liefert ") .. m.s.n .. "× "
-                        .. m.name .. " (" .. (K.LIEFERWEGE[m.s.weg] or "?") .. ").")
+                    O.Chat(B.Anzeige(m.wer) .. was .. m.name .. " (" .. (K.LIEFERWEGE[m.s.weg] or "?") .. ").")
                 end
             elseif m == "zurueckgezogen" and not eigene[o.von] then
                 local meine = false
@@ -4188,7 +4237,16 @@ function B.Zusagen(o, schluessel, n, weg, geliefert, still)
             if n <= 0 then
                 z.zusagen[ich] = { n = 0, weg = weg or 1, g = false, at = math.max(time(), (alt and alt.at or 0) + 1) }
             else
-                z.zusagen[ich] = { n = n, weg = weg or 1, g = geliefert and true or false,
+                local af, am = 0, 0
+                if alt then
+                    local _, f1, m1 = B.FM(alt)
+                    af, am = f1, m1
+                end
+                if geliefert then
+                    af, am = n, n
+                end
+                af, am = math.min(af, n), math.min(am, n)
+                z.zusagen[ich] = { n = n, weg = weg or 1, g = am >= n, f = af, m = am,
                     at = math.max(time(), (alt and alt.at or 0) + 1) }
             end
         end
@@ -4198,6 +4256,383 @@ function B.Zusagen(o, schluessel, n, weg, geliefert, still)
         Melden((geliefert and "Als geliefert vermerkt." or (n <= 0 and "Zusage zurückgenommen." or "Zusage gesendet."))
             .. (gesendet and "" or " Das wird übertragen, sobald ihr zusammen in einer Gruppe seid."))
     end
+end
+
+-- ---------------------------------------------------------------------------
+-- ab 1.7.0: Warenfluss. Soll (n) -> gefertigt (f) -> geliefert (m); lieferbar = f - m.
+-- Gebucht wird nur auf deinen Klick ("Dafür herstellen", "Zubuchen") oder bei einer erkannten
+-- Lieferung (Handel, Post). Jede automatische Buchung kommt mit Meldung und "Rückgängig".
+-- ---------------------------------------------------------------------------
+B.W = { ziel = nil, craftBis = 0, wartend = 0, wartendZeit = 0, handel = nil, post = nil, letzte = nil }
+
+local function ItemAusLink(link)
+    return link and tonumber(string.match(link, "item:(%d+)")) or nil
+end
+
+function B.AuftragZeile(oid, key)
+    local o = B.Liste()[oid]
+    if o then
+        for _, z in ipairs(o.zeilen or {}) do
+            if B.ZKey(z) == key then
+                return o, z
+            end
+        end
+    end
+end
+
+-- meine Zusage neu setzen (gefertigt f, geliefert m), gedeckelt auf Soll n
+function B.FMSetzen(o, z, f, m)
+    local s, altName = B.MeineZusage(z)
+    if not s then
+        return
+    end
+    local ich = B.Ich()
+    if altName and altName ~= ich then
+        z.zusagen[altName] = nil
+    end
+    local n = s.n or 0
+    m = math.max(0, math.min(m, n))
+    f = math.max(m, math.min(f, n))
+    z.zusagen[ich] = { n = n, weg = s.weg or 1, g = n > 0 and m >= n, f = f, m = m,
+        at = math.max(time(), (s.at or 0) + 1) }
+    B.Verteilen(o)
+end
+
+-- art "f" = gefertigt buchen, "m" = geliefert buchen. Rueckgabe: wirklich gebuchte Menge
+function B.Buchen(o, z, art, menge)
+    local s = B.MeineZusage(z)
+    if not s or (s.n or 0) <= 0 or menge <= 0 then
+        return 0
+    end
+    local n, f, m = B.FM(s)
+    if art == "f" then
+        menge = math.min(menge, n - f)
+        f = f + menge
+    else
+        menge = math.min(menge, f - m)
+        m = m + menge
+    end
+    if menge <= 0 then
+        return 0
+    end
+    B.FMSetzen(o, z, f, m)
+    return menge
+end
+
+-- Menge in der Tasche, die zu keinem Auftrag gebucht ist
+function B.Unzugeordnet(itemID)
+    local tasche = GetItemCount and GetItemCount(itemID) or 0
+    local gebucht = 0
+    for _, o in pairs(B.Liste()) do
+        if o.status == "offen" then
+            for _, z in ipairs(o.zeilen or {}) do
+                if z.itemID == itemID and not z.rezeptID then
+                    local s = B.MeineZusage(z)
+                    if s and (s.n or 0) > 0 then
+                        local _, f, m = B.FM(s)
+                        gebucht = gebucht + (f - m)
+                    end
+                end
+            end
+        end
+    end
+    return math.max(0, tasche - gebucht)
+end
+
+-- mein Rezept fuer diese Zeile (nur Gegenstaende; Verzauberungen haben nichts in der Tasche)
+function B.MeinRezept(z)
+    if z.rezeptID or not z.itemID or z.itemID <= 0 then
+        return nil
+    end
+    for rid, r in pairs(GuildERPData.recipes or {}) do
+        if r.itemID == z.itemID then
+            return rid, r
+        end
+    end
+end
+
+function B.IstZiel(o, z)
+    local ziel = B.W.ziel
+    return ziel and ziel.oid == o.id and ziel.key == B.ZKey(z) or false
+end
+
+-- "Dafür herstellen": ab jetzt zaehlt, was ich herstelle, fuer genau diese Zeile
+function B.ZielSetzen(o, z)
+    if B.IstZiel(o, z) then
+        B.W.ziel = nil
+        Melden("Herstellen für diesen Auftrag beendet. Es wird nichts mehr zugebucht.")
+        return
+    end
+    local rid, r = B.MeinRezept(z)
+    local s = B.MeineZusage(z)
+    if not rid or not s then
+        return
+    end
+    local n, f = B.FM(s)
+    local rest = n - f
+    if rest <= 0 then
+        return
+    end
+    B.W.ziel = { oid = o.id, key = B.ZKey(z), itemID = z.itemID, basis = GetItemCount and GetItemCount(z.itemID) or 0 }
+    B.W.wartend = 0
+    Melden("Was du jetzt herstellst, zählt für " .. B.Anzeige(o.von) .. ": bis zu " .. rest .. "× " .. B.ZName(z)
+        .. ". Mehr bleibt unzugeordnet in der Tasche.")
+    P.Herstellen(rid, math.ceil(rest / math.max(1, r.numMade or 1)))
+end
+
+-- Kasten mit Meldung und "Rückgängig" (links unter dem Hinweis-Fenster)
+function B.Gebucht(text, eintraege)
+    O.Chat(text)
+    O.Merken("GEBUCHT", text)
+    B.W.letzte = { liste = eintraege, zeit = GetTime and GetTime() or 0 }
+    local h = B.buchungFenster
+    if not h then
+        h = O.Rahmen("Frame", "GuildERPBuchung", UIParent, K.BACKDROP_VORLAGE)
+        h:SetSize(440, 90)
+        h:SetPoint("TOP", 0, -260)
+        h:SetFrameStrata("DIALOG")
+        h:SetClampedToScreen(true)
+        h:EnableMouse(true)
+        if h.SetBackdrop then
+            h:SetBackdrop(K.BACKDROP_RAHMEN)
+        end
+        h.titel = Schrift(h, "GameFontNormalSmall")
+        h.titel:SetPoint("TOPLEFT", 16, -14)
+        h.titel:SetText("GUILD ERP · GEBUCHT")
+        h.text = Schrift(h, "GameFontHighlight")
+        h.text:SetPoint("TOPLEFT", h.titel, "BOTTOMLEFT", 0, -4)
+        h.text:SetPoint("RIGHT", -16, 0)
+        h.zurueck = O.Rahmen("Button", nil, h, "UIPanelButtonTemplate")
+        h.zurueck:SetSize(100, 22)
+        h.zurueck:SetText("Rückgängig")
+        h.zurueck:SetScript("OnClick", function() B.Zurueck() end)
+        h.ok = O.Rahmen("Button", nil, h, "UIPanelButtonTemplate")
+        h.ok:SetSize(70, 22)
+        h.ok:SetText("OK")
+        h.ok:SetScript("OnClick", function() h:Hide() end)
+        B.buchungFenster = h
+    end
+    h.text:SetText(text)
+    h:SetHeight(14 + 14 + (h.text:GetStringHeight() or 14) + 8 + 22 + 12)
+    h.zurueck:ClearAllPoints()
+    h.zurueck:SetPoint("BOTTOMLEFT", 16, 12)
+    h.ok:ClearAllPoints()
+    h.ok:SetPoint("LEFT", h.zurueck, "RIGHT", 6, 0)
+    h:Show()
+    local marke = B.W.letzte
+    O.Nach(20, function()
+        if B.W.letzte == marke and B.buchungFenster then
+            B.buchungFenster:Hide()
+        end
+    end)
+    if FensterAktualisieren then
+        FensterAktualisieren()
+    end
+end
+
+-- letzte Buchung zuruecknehmen
+function B.Zurueck()
+    local l = B.W.letzte
+    if not l then
+        Melden("Es gibt nichts zurückzunehmen.")
+        return
+    end
+    B.W.letzte = nil
+    for _, e in ipairs(l.liste) do
+        local o, z = B.AuftragZeile(e.oid, e.key)
+        local s = o and B.MeineZusage(z)
+        if s then
+            local _, f, m = B.FM(s)
+            if e.art == "f" then
+                f = f - e.menge
+                m = math.min(m, f)
+            else
+                m = m - e.menge
+            end
+            B.FMSetzen(o, z, math.max(0, f), math.max(0, m))
+        end
+    end
+    if B.buchungFenster then
+        B.buchungFenster:Hide()
+    end
+    Melden("Rückgängig gemacht.")
+    if FensterAktualisieren then
+        FensterAktualisieren()
+    end
+end
+
+-- Zubuchen: Tasche -> gefertigt, bis zum Soll
+function B.Zubuchen(o, z)
+    local u = B.Unzugeordnet(z.itemID)
+    local b = B.Buchen(o, z, "f", u)
+    if b > 0 then
+        local s = B.MeineZusage(z)
+        local n, f = B.FM(s)
+        B.Gebucht(b .. "× " .. B.ZName(z) .. " für " .. B.Anzeige(o.von) .. " zugebucht (gefertigt " .. f .. " von " .. n .. ").",
+            { { oid = o.id, key = B.ZKey(z), art = "f", menge = b } })
+    else
+        Melden("Es ist nichts Unzugeordnetes in der Tasche.")
+    end
+end
+
+-- Hergestelltes nach dem Zielauftrag buchen (nur bei einer beobachteten Herstellung)
+function B.TascheSehen(craft)
+    local w = B.W
+    local ziel = w.ziel
+    if not ziel then
+        return
+    end
+    local o, z = B.AuftragZeile(ziel.oid, ziel.key)
+    local s = o and o.status == "offen" and B.MeineZusage(z)
+    if not s then
+        w.ziel = nil
+        return
+    end
+    local jetzt = GetItemCount and GetItemCount(ziel.itemID) or 0
+    local mehr = jetzt - (ziel.basis or jetzt)
+    ziel.basis = jetzt
+    local t = GetTime and GetTime() or 0
+    if mehr > 0 then
+        w.wartend = w.wartend + mehr
+        w.wartendZeit = t
+    end
+    if craft then
+        w.craftBis = t + 3
+    end
+    if w.wartend > 0 and t <= w.craftBis and t - w.wartendZeit <= 3 then
+        local b = B.Buchen(o, z, "f", w.wartend)
+        w.wartend = 0
+        if b > 0 then
+            local n, f = B.FM(B.MeineZusage(z))
+            if f >= n then
+                w.ziel = nil
+            end
+            B.Gebucht(b .. "× " .. B.ZName(z) .. " für " .. B.Anzeige(o.von) .. " gefertigt (" .. f .. " von " .. n .. ")."
+                .. (f >= n and " Jetzt kannst du liefern." or ""), { { oid = o.id, key = B.ZKey(z), art = "f", menge = b } })
+        end
+    elseif w.wartend > 0 and t - w.wartendZeit > 3 then
+        w.wartend = 0
+    end
+end
+
+-- Lieferung erkannt: items = { [itemID] = Anzahl } an Empfaenger "an". Bucht bis lieferbar.
+function B.Lieferung(an, items, wie, verb)
+    if not an or not items or not next(items) then
+        return
+    end
+    local offene = {}
+    for _, o in pairs(B.Liste()) do
+        if o.status == "offen" and B.Gleich(o.von, an) then
+            table.insert(offene, o)
+        end
+    end
+    table.sort(offene, function(x, y) return (x.at or 0) < (y.at or 0) end)
+    local liste, teile, hinweise = {}, {}, {}
+    for _, o in ipairs(offene) do
+        for _, z in ipairs(o.zeilen or {}) do
+            local id = z.itemID
+            local s = id and id > 0 and not z.rezeptID and (items[id] or 0) > 0 and B.MeineZusage(z)
+            if s and (s.n or 0) > 0 then
+                local _, f, m = B.FM(s)
+                local b = B.Buchen(o, z, "m", math.min(items[id], f - m))
+                if b > 0 then
+                    items[id] = items[id] - b
+                    local n, _, m2 = B.FM(B.MeineZusage(z))
+                    table.insert(liste, { oid = o.id, key = B.ZKey(z), art = "m", menge = b })
+                    table.insert(teile, b .. "× " .. B.ZName(z) .. " (" .. m2 .. " von " .. n .. ")")
+                end
+                if items[id] > 0 and m + b >= f then
+                    hinweise[B.ZName(z)] = true
+                end
+            end
+        end
+    end
+    if #liste > 0 then
+        local rest = {}
+        for name in pairs(hinweise) do
+            table.insert(rest, name)
+        end
+        B.Gebucht(wie .. " " .. B.Anzeige(an) .. " " .. verb .. ": " .. table.concat(teile, ", ") .. " als geliefert gebucht."
+            .. (#rest > 0 and (" Mehr als gefertigt war bei: " .. table.concat(rest, ", ") .. ". Das Übrige ist nicht gebucht.") or ""),
+            liste)
+    end
+end
+
+-- Handel: Partner und meine angebotenen Gegenstaende merken, gebucht wird erst bei ERR_TRADE_COMPLETE
+function B.HandelErfassen()
+    local items = {}
+    for i = 1, 6 do
+        local id = GetTradePlayerItemLink and ItemAusLink(GetTradePlayerItemLink(i))
+        if id then
+            local _, _, anz = GetTradePlayerItemInfo(i)
+            items[id] = (items[id] or 0) + (anz or 1)
+        end
+    end
+    B.W.handel = { partner = B.W.partner, items = items }
+end
+
+-- Post: beim Absenden die Anhaenge merken, gebucht wird bei MAIL_SEND_SUCCESS
+function B.PostErfassen(an)
+    local items = {}
+    for i = 1, (ATTACHMENTS_MAX_SEND or 12) do
+        local link = GetSendMailItemLink and GetSendMailItemLink(i)
+        local id = ItemAusLink(link)
+        if id then
+            local a, b, c, d, e = GetSendMailItem(i)
+            local anz = e ~= nil and d or c
+            items[id] = (items[id] or 0) + (type(anz) == "number" and anz or 1)
+        end
+    end
+    B.W.post = next(items) and { an = an and (string.match(an, "^[^-]+") or an), items = items } or nil
+end
+
+function B.WEreignis(event, ...)
+    local w = B.W
+    if event == "TRADE_SHOW" then
+        local name = UnitName and UnitName("NPC")
+        if not name and TradeFrameRecipientNameText then
+            name = TradeFrameRecipientNameText:GetText()
+        end
+        w.partner, w.handel = name, nil
+    elseif event == "TRADE_ACCEPT_UPDATE" then
+        B.HandelErfassen()
+    elseif event == "UI_INFO_MESSAGE" then
+        for i = 1, select("#", ...) do
+            local m = select(i, ...)
+            if m == ERR_TRADE_COMPLETE then
+                local h = w.handel
+                w.handel = nil
+                if h and h.partner then
+                    B.Lieferung(h.partner, h.items, "Handel mit", "erkannt")
+                end
+            elseif m == ERR_TRADE_CANCELLED then
+                w.handel = nil
+            end
+        end
+    elseif event == "MAIL_SEND_SUCCESS" then
+        local p = w.post
+        w.post = nil
+        if p then
+            B.Lieferung(p.an, p.items, "Brief an", "gesendet")
+        end
+    elseif event == "MAIL_FAILED" then
+        w.post = nil
+    elseif event == "BAG_UPDATE_DELAYED" then
+        B.TascheSehen(false)
+    elseif event == "CHAT_MSG_TRADESKILLS" then
+        B.TascheSehen(true)
+    elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+        local einheit, _, zauber = ...
+        if einheit == "player" and w.ziel and GuildERPData.recipes and GuildERPData.recipes[zauber] then
+            B.TascheSehen(true)
+        end
+    end
+end
+
+if hooksecurefunc then
+    pcall(hooksecurefunc, "SendMail", function(an)
+        pcall(B.PostErfassen, an)
+    end)
 end
 
 -- ab 1.6.1: eine Bestellung an mich absagen (mit Grund). Nur ein Vermerk: der Besteller
@@ -4649,6 +5084,9 @@ function B.ZusageOeffnen(anker, o, z)
     local verzaubern = z.rezeptID and (not z.itemID or z.itemID == 0)
     e.n = eigen and eigen.n > 0 and eigen.n or math.max(1, z.n - zu)
     e.wegNr = eigen and eigen.weg or (verzaubern and 4 or 1)
+    if e.wegNr == 3 then
+        e.wegNr = 1 -- Gildenbank gibt es nicht mehr
+    end
     local name = B.ZName(z)
     e.frage:SetText("Wie viele " .. name .. " lieferst du, und wie?")
     -- Rezept-Bestellung: als Planauftrag uebernehmen (vorgewaehlt)
@@ -4673,8 +5111,8 @@ function B.ZusageOeffnen(anker, o, z)
     e.plus:SetScript("OnClick", function() e.n = math.min(10000, e.n + 1); zeigen() end)
     e.weg:SetScript("OnClick", function(self)
         local liste = {}
-        for i, w in ipairs(K.LIEFERWEGE) do
-            table.insert(liste, { wert = i, text = w, gewaehlt = i == e.wegNr })
+        for _, i in ipairs(K.WEGWAHL) do
+            table.insert(liste, { wert = i, text = K.LIEFERWEGE[i], gewaehlt = i == e.wegNr })
         end
         PopupZeigen(self, 170, liste, function(wert)
             e.wegNr = wert
@@ -4806,7 +5244,7 @@ function B.AnsichtBauen(f)
     a.trenner:SetPoint("TOP", 0, 0)
     a.trenner:SetPoint("BOTTOM", 0, 0)
     a.trenner:SetColorTexture(K.GOLD_DUNKEL[1], K.GOLD_DUNKEL[2], K.GOLD_DUNKEL[3], 0.7)
-    a.spalten[1].fuss:SetText("Hast du geliefert, vermerke es mit „Geliefert“.")
+    a.spalten[1].fuss:SetText("Handeln und Verschicken werden erkannt und gebucht. Sonst: „Alles geliefert“.")
     a.spalten[2].fuss:SetText("Hast du alles bekommen, schließe die Bestellung ab.")
     f.best = a
     return a
@@ -4834,8 +5272,12 @@ function B.SchnZeile(sch, i)
     z.chip = Schrift(z, "GameFontHighlightSmall", false)
     z.k1 = B.Knopf(z, "Ich liefere", 96)
     z.k1:SetHeight(20)
-    z.k2 = B.Knopf(z, "Geliefert", 80)
+    z.k2 = B.Knopf(z, "Alles geliefert", 110)
     z.k2:SetHeight(20)
+    z.k3 = B.Knopf(z, "Dafür herstellen", 120)
+    z.k3:SetHeight(20)
+    z.k4 = B.Knopf(z, "Zubuchen", 100)
+    z.k4:SetHeight(20)
     z.linie = z:CreateTexture(nil, "ARTWORK")
     z.linie:SetHeight(1)
     z.linie:SetPoint("BOTTOMLEFT")
@@ -4961,6 +5403,10 @@ function B.AnsichtZeigen(f)
                 r.k2:ClearAllPoints()
                 r.k1:Hide()
                 r.k2:Hide()
+                r.k3:ClearAllPoints()
+                r.k4:ClearAllPoints()
+                r.k3:Hide()
+                r.k4:Hide()
                 r.chip:ClearAllPoints()
                 r.chip:SetPoint("TOPRIGHT", 0, -6)
                 if i == 1 and storniert then
@@ -4978,9 +5424,29 @@ function B.AnsichtZeigen(f)
                     zusatz = "Dieses Rezept kennst du nicht."
                 elseif i == 1 then
                     if eigen and eigen.n > 0 then
-                        zusatz = eigen.g and ("Du hast " .. eigen.n .. " geliefert (" .. K.LIEFERWEGE[eigen.weg] .. ").")
-                            or ("Du lieferst " .. eigen.n .. " (" .. K.LIEFERWEGE[eigen.weg] .. ").")
-                        if not eigen.g then
+                        local en, ef, em = B.FM(eigen)
+                        zusatz = "Soll " .. en .. " · gefertigt " .. ef .. " · geliefert " .. em .. " · lieferbar " .. (ef - em)
+                            .. " (" .. K.LIEFERWEGE[eigen.weg] .. ")."
+                        if B.IstZiel(o, z) then
+                            zusatz = zusatz .. Farbe("1f6b2a", " Was du herstellst, zählt hierfür.")
+                        end
+                        if ef < en and B.MeinRezept(z) then
+                            r.k3:SetText(B.IstZiel(o, z) and "Herstellen beenden" or "Dafür herstellen")
+                            r.k3:SetScript("OnClick", function()
+                                B.ZielSetzen(o, z)
+                                FensterAktualisieren()
+                            end)
+                            r.k3:Show()
+                        end
+                        local unz = (ef < en and z.itemID and z.itemID > 0 and not z.rezeptID) and B.Unzugeordnet(z.itemID) or 0
+                        if unz > 0 then
+                            r.k4:SetText("Zubuchen " .. math.min(unz, en - ef))
+                            r.k4:SetScript("OnClick", function()
+                                B.Zubuchen(o, z)
+                            end)
+                            r.k4:Show()
+                        end
+                        if em < en then
                             r.k2:SetPoint("TOPRIGHT", 0, -4)
                             r.k2:SetScript("OnClick", function()
                                 B.Zusagen(o, B.ZKey(z), eigen.n, eigen.weg, true)
@@ -5022,8 +5488,10 @@ function B.AnsichtZeigen(f)
                     local teile, absagen = {}, {}
                     for wer, sz in pairs(z.zusagen or {}) do
                         if (sz.n or 0) > 0 then
-                            table.insert(teile, B.Anzeige(wer) .. (sz.g and " hat " .. sz.n .. " geliefert" or " liefert " .. sz.n)
-                                .. " (" .. (K.LIEFERWEGE[sz.weg] or "?") .. ")")
+                            local sn, sf, sm = B.FM(sz)
+                            local was = (sm >= sn and (" hat " .. sn .. " geliefert")) or (sm > 0 and (" hat " .. sm .. " von " .. sn .. " geliefert"))
+                                or (sf > 0 and (" liefert " .. sn .. " (" .. sf .. " gefertigt)")) or (" liefert " .. sn)
+                            table.insert(teile, B.Anzeige(wer) .. was .. " (" .. (K.LIEFERWEGE[sz.weg] or "?") .. ")")
                         elseif sz.ab then
                             table.insert(absagen, B.Anzeige(wer) .. " hat abgesagt: „" .. sz.ab .. "“")
                         end
@@ -5053,6 +5521,15 @@ function B.AnsichtZeigen(f)
                 r.zusatz:SetText(zusatz or "")
                 r.zusatz:SetPoint("RIGHT", r, "RIGHT", 0, 0)
                 local h = 5 + (r.text:GetStringHeight() or 14) + 2 + (r.zusatz:GetStringHeight() or 12) + 7
+                if r.k3:IsShown() or r.k4:IsShown() then
+                    h = h + 24
+                    r.k3:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT", 0, 6)
+                    if r.k3:IsShown() then
+                        r.k4:SetPoint("BOTTOMRIGHT", r.k3, "BOTTOMLEFT", -4, 0)
+                    else
+                        r.k4:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT", 0, 6)
+                    end
+                end
                 r:SetHeight(h)
                 r:Show()
                 zy = zy + h
@@ -5224,8 +5701,9 @@ function P.Zusagen(rezeptID)
                 if (s.n or 0) > 0 then
                     summe = summe + s.n
                     -- Geliefertes liegt danach im Bestand und zaehlt dort
-                    if not s.g then
-                        table.insert(e.liste, { wer = wer, n = s.n, weg = s.weg })
+                    local _, _, sm = B.FM(s)
+                    if sm < s.n then
+                        table.insert(e.liste, { wer = wer, n = s.n - sm, weg = s.weg })
                     else
                         e.geliefert = e.geliefert or {}
                         table.insert(e.geliefert, { wer = wer, n = s.n, weg = s.weg })
@@ -5751,7 +6229,8 @@ function P.FuerZeigen(k, plan, y)
         if eigen and eigen.g then
             stand = Farbe(K.STATUS_HEX.tasche, "Du hast " .. eigen.n .. " geliefert.")
         elseif eigen and (eigen.n or 0) > 0 then
-            stand = "Du lieferst " .. eigen.n .. " (" .. P.Weg(eigen.weg) .. "). Noch nicht geliefert."
+            local _, _, pm = B.FM(eigen)
+            stand = "Du lieferst " .. eigen.n .. " (" .. P.Weg(eigen.weg) .. "). " .. (pm > 0 and (pm .. " davon geliefert.") or "Noch nicht geliefert.")
             alles = false
         else
             stand = "Noch keine Zusage von dir."
@@ -6061,7 +6540,7 @@ function P.AnsichtZeigen(f)
             z.punkt:ClearAllPoints()
             z.punkt:SetPoint("TOPLEFT", x, -7)
             K.SymbolSetzen(z.punkt, farbe, 14)
-            z.zahl:SetText(Farbe(K.STATUS_HEX[farbe], zeile.da) .. Farbe("77715f", " / " .. zeile.bedarf))
+            z.zahl:SetText(Farbe(K.STATUS_HEX[farbe], zeile.vorrat or zeile.da) .. Farbe("77715f", " / " .. zeile.bedarf))
             z.name:ClearAllPoints()
             z.name:SetPoint("TOPLEFT", x + 18, -7)
             z.name:SetPoint("RIGHT", z.zahl, "LEFT", -8, 0)
@@ -6317,7 +6796,7 @@ function P.NetzZeigen()
             k.info:SetText(z.text)
         else
             k.name:SetText(ItemName(z.itemID) or Farbe("9a9384", "Name wird geladen …"))
-            k.zahl:SetText(Farbe(K.STATUS_HEX[farbe], z.da) .. Farbe("77715f", " / " .. z.bedarf))
+            k.zahl:SetText(Farbe(K.STATUS_HEX[farbe], z.vorrat or z.da) .. Farbe("77715f", " / " .. z.bedarf))
             k.info:SetText(P.InfoText(z, fraktion))
         end
         k.name:SetWidth(kachelB - (12 + gr + 8) - 60)
@@ -10256,6 +10735,11 @@ for _, e in ipairs({ "TRADE_SHOW", "MAIL_SHOW", "MAIL_INBOX_UPDATE", "MAIL_CLOSE
     "TRAINER_SHOW", "TRAINER_UPDATE", "LOOT_OPENED" }) do
     pcall(frame.RegisterEvent, frame, e)
 end
+for _, e in ipairs({ "TRADE_ACCEPT_UPDATE", "UI_INFO_MESSAGE", "MAIL_SEND_SUCCESS", "MAIL_FAILED", "BAG_UPDATE_DELAYED",
+    "CHAT_MSG_TRADESKILLS" }) do
+    pcall(frame.RegisterEvent, frame, e)
+end
+pcall(frame.RegisterUnitEvent, frame, "UNIT_SPELLCAST_SUCCEEDED", "player")
 for _, e in ipairs({ "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "COMMODITY_SEARCH_RESULTS_UPDATED",
     "ITEM_SEARCH_RESULTS_UPDATED", "REPLICATE_ITEM_LIST_UPDATE", "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN" }) do
     pcall(frame.RegisterEvent, frame, e)
@@ -10272,6 +10756,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
 end)
 
 function O.Ereignis(event, ...)
+    pcall(B.WEreignis, event, ...)
     if A.Ereignis(event, ...) then
         return
     end
@@ -10399,8 +10884,10 @@ function O.Befehl(eingabe)
         O.Zeigen()
     elseif eingabe == "optik" then
         O.OptikLesen()
+    elseif eingabe == "zurueck" or eingabe == "zurück" then
+        B.Zurueck()
     elseif eingabe == "hilfe" or eingabe == "help" then
-        Melden("/gerp = Werkstatt öffnen/schließen, /gerp optionen = Optionen, /gerp info = Stand im Chat, /gerp abgleich = Abgleich prüfen, /gerp optik = Berufefenster-Optik auslesen.")
+        Melden("/gerp = Werkstatt öffnen/schließen, /gerp optionen = Optionen, /gerp info = Stand im Chat, /gerp abgleich = Abgleich prüfen, /gerp optik = Berufefenster-Optik auslesen, /gerp zurueck = letzte Buchung zurücknehmen.")
     else
         FensterUmschalten()
     end

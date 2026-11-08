@@ -1,5 +1,5 @@
-Guild ERP 1.6.2 (Beta)
-====================
+Guild ERP 1.7.0 (Beta)
+=====================
 
 Was macht das Add-on?
 Links im Fenster ist dein Rezeptbuch, rechts der Herstellauftrag.
@@ -51,10 +51,10 @@ Bestellungen (in der Gruppe)
   sobald ihr zusammen in einer Gruppe seid. Beide brauchen Guild ERP.
 - Oben im Fenster gibt es den Reiter "Bestellungen". Links steht, was bei dir
   bestellt wurde: Mit "Ich liefere" sagst du zu, wie viele du lieferst und wie
-  (direkt handeln, per Post oder in die Gildenbank). Hast du geliefert, klicke
-  "Geliefert". Rechts stehen deine eigenen Bestellungen mit dem Stand jeder Zeile.
+  (direkt handeln oder per Post). Hast du anders geliefert, klicke
+  "Alles geliefert". Handeln und Verschicken werden erkannt (siehe 1.7.0). Rechts stehen deine eigenen Bestellungen mit dem Stand jeder Zeile.
   Hast du alles bekommen, klicke "Abschließen".
-- Eine Bestellung ist nur ein Vermerk. Übergeben (Handel, Post, Gildenbank) machst
+- Eine Bestellung ist nur ein Vermerk. Übergeben (Handel, Post) machst
   du selbst wie gewohnt.
 
 Planaufträge (neu in 0.6)
@@ -228,3 +228,18 @@ Neu in 1.6.2:
 - Planauftrag umsetzen: Auf der Karte gibt es jetzt den Knopf "Herstellen". Er wirkt wie der Knopf in der Werkstatt: ein Klick ist eine Herstellung der vorgemerkten Menge. Das geht nur mit dem Charakter, der herstellt, und nur, wenn alles in der Tasche ist.
 - Planauftrag und Bestellung verknüpfen: Unter "Für Bestellungen" stehen die Bestellungen, für die der Planauftrag gedacht ist, jeweils mit dem Knopf "Geliefert". Über "Mit Bestellung verknüpfen" hängst du eine offene Bestellung an dich nachträglich an. Guild ERP sagt dort zu und erhöht die Menge. Ist alles geliefert, schließt "Planauftrag erledigt" ihn ab.
 - Rezeptbuch: Rechts steht, wie viele Stück du herstellen kannst, zum Beispiel "3 (5)": 3 aus der Tasche, 5 zusammen mit der Bank. Darunter steht klein der Gewinn je Stück, sobald alle Preise bekannt sind.
+
+Neu in 1.6.3:
+- Die Handwerkstasche wird jetzt mitgelesen. Rohstoffe darin zählen als "in der Tasche", genauso das Material-Fach der Bank. Vorher wurden sie nicht gesehen.
+
+Neu in 1.6.4:
+- Bei den Zutaten zeigt "da" jetzt, wie viel du wirklich hast, auch wenn es mehr ist als nötig (zum Beispiel 18 / 8). Vorher stand dort höchstens die nötige Menge.
+
+Neu in 1.7.0: Warenfluss für Bestellungen
+- Jede Zeile einer Bestellung hat jetzt Soll, gefertigt und geliefert. Lieferbar ist gefertigt minus geliefert. Teillieferungen sind möglich. Der Status folgt aus den Zahlen.
+- Hergestellt wird nichts automatisch gebucht. Mit "Dafür herstellen" sagst du: Was ich jetzt herstelle, zählt für genau diese Zeile (bis zum Soll). Der Rest bleibt unzugeordnet in der Tasche. "Herstellen beenden" hebt das wieder auf. Das geht auch bei mehreren Bestellungen für denselben Gegenstand: du wählst die Zeile.
+- "Zubuchen" ordnet nachträglich Vorrat aus der Tasche der Zeile zu, höchstens bis zum Soll.
+- Handel: Handelst du mit dem Besteller, bucht Guild ERP die Lieferung bis zur Menge "lieferbar" und meldet es. Mit "Rückgängig" (oder /gerp zurueck) nimmst du es zurück.
+- Post: Beim Absenden an den Besteller wird ebenso gebucht, mit Meldung und "Rückgängig". Der Besteller bestätigt wie bisher mit "erhalten".
+- Der Lieferweg "In die Gildenbank" entfällt. Bei alten Bestellungen bleibt er sichtbar.
+- Alle in der Gruppe brauchen 1.7.0, sonst sehen ältere Versionen Zusagen mit Teillieferung nicht.
