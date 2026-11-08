@@ -1,4 +1,4 @@
--- Guild ERP 1.6.0 (Beta)
+-- Guild ERP 1.6.1 (Beta)
 -- Werkstatt: links das Rezeptbuch (Handwerk waehlen, suchen), rechts der Herstellauftrag mit
 -- mehrstufiger Stueckliste und Ampel, ob alles da ist.
 -- Liest ausschliesslich ueber die normale Add-on-Schnittstelle (nur lesend) und speichert
@@ -26,7 +26,7 @@
 local ADDON_TITEL = "|cffd4af37Guild ERP|r"
 local frame = CreateFrame("Frame")
 local K = {} -- Konstanten (spart Platz fuer lokale Namen)
-K.VERSION = "1.6.0"
+K.VERSION = "1.6.1"
 K.ICON_UNBEKANNT = "Interface\\Icons\\INV_Misc_QuestionMark"
 K.ICON_TITEL = "Interface\\Icons\\Trade_BlackSmithing"
 K.ICON_REZEPT = "Interface\\Icons\\INV_Scroll_03"
@@ -624,6 +624,11 @@ local function RezepteLesen()
         if ok3 and type(info) == "table" and info.learned then
             bekannt[id] = true
             anzahl = anzahl + 1
+            -- ab 1.6.1: Skill-Stufe merken (0 orange, 1 gelb, 2 gruen, 3 grau), je Charakter
+            if type(info.relativeDifficulty) == "number" then
+                c.stufen = c.stufen or {}
+                c.stufen[id] = info.relativeDifficulty
+            end
             local e = d.recipes[id] or {}
             e.name = info.name or e.name
             e.icon = info.icon or e.icon
@@ -939,8 +944,9 @@ local function HerstellerSammeln(fraktion)
                     local r = d.recipes[id]
                     if r and r.reagents then
                         anzahl = anzahl + 1
-                        rezepte[id] = rezepte[id] or { wer = {} }
+                        rezepte[id] = rezepte[id] or { wer = {}, stufen = {} }
                         table.insert(rezepte[id].wer, c.name)
+                        rezepte[id].stufen[c.name] = c.stufen and c.stufen[id]
                         if r.itemID then
                             hersteller[r.itemID] = hersteller[r.itemID] or {}
                             local eintrag
@@ -1363,7 +1369,7 @@ function Kat.WerkstattFiltern(rezepte, berufe)
             kann = kann or n == ich
         end
         if kann then
-            eigene[id] = { wer = { ich } }
+            eigene[id] = { wer = { ich }, stufen = info.stufen }
         else
             Kat.andereRezepte[id] = info
         end
@@ -2745,7 +2751,7 @@ local function RezeptbuchZeigen(f, fraktion, rezepte, berufe)
     for id, info in pairs(rezepte) do
         local r = d.recipes[id]
         if r.profession == beruf and passt(r.name) then
-            table.insert(gelernt, { id = id, r = r, wer = info.wer })
+            table.insert(gelernt, { id = id, r = r, wer = info.wer, stufen = info.stufen })
         end
     end
     table.sort(gelernt, function(a, b) return (a.r.name or "") < (b.r.name or "") end)
@@ -2878,8 +2884,18 @@ local function RezeptbuchZeigen(f, fraktion, rezepte, berufe)
             for _, w in ipairs(e.wer) do
                 table.insert(wer, w)
             end
+            -- ab 1.6.1: Farbe nach Skill-Punkten wie im Berufefenster (gespielter Charakter zuerst)
+            local ich = UnitName("player")
+            local stufe = e.stufen and (e.stufen[ich] or e.stufen[wer[1]])
+            local tip
+            if stufe and K.STUFEN[stufe] then
+                hex = K.STUFEN[stufe][1]
+                tip = Farbe(hex, K.STUFEN[stufe][2]) .. "\n"
+                    .. Farbe("808080", "Stand: zuletzt geöffnetes Berufefenster von "
+                        .. ((e.stufen[ich] and ich) or wer[1]) .. ".")
+            end
             zeile({
-                wert = e.id, text = Farbe(hex, e.r.name or "?"),
+                wert = e.id, text = Farbe(hex, e.r.name or "?"), tip = tip,
                 icon = ItemIcon(e.r.itemID) or e.r.icon, itemID = e.r.itemID,
                 rechts = (function()
                     local g = A.Gewinn(e.id, 1)
@@ -3463,7 +3479,9 @@ function B.AlsText(o)
     for _, z in ipairs(o.zeilen or {}) do
         local zus = {}
         for wer, s in pairs(z.zusagen or {}) do
-            table.insert(zus, table.concat({ B.M(wer), s.n or 0, s.weg or 1, s.g and 1 or 0, s.at or 0 }, "/"))
+            -- ab 1.6.1: Absage mit Grund als 6. Teil (aeltere Versionen ignorieren den Eintrag)
+            table.insert(zus, table.concat({ B.M(wer), s.n or 0, s.weg or 1, s.g and 1 or 0, s.at or 0 }, "/")
+                .. (s.ab and ("/" .. B.M(s.ab)) or ""))
         end
         local kopf = z.rezeptID and ("r" .. z.rezeptID .. "." .. (z.itemID or 0)) or z.itemID
         table.insert(zeilen, table.concat({ kopf, z.n, table.concat(zus, ";") }, ":"))
@@ -3507,16 +3525,18 @@ function B.AusText(text)
             id, n, zus = rItem, rn, rzus
         end
         if id then
-            local z = { itemID = B.Zahl(id), n = math.max(1, B.Zahl(n, 10000)), zusagen = {},
-                rezeptID = rid and B.Zahl(rid) or nil }
+            -- ab 1.6.1: Nummern nicht mehr bei 100000 abschneiden (Rezepte und Gegenstaende haben groessere)
+            local z = { itemID = B.Zahl(id, 4000000000), n = math.max(1, B.Zahl(n, 10000)), zusagen = {},
+                rezeptID = rid and B.Zahl(rid, 4000000000) or nil }
             local anzahl = 0
             for s in string.gmatch(zus or "", "[^;]+") do
-                local wer, sn, weg, g, at = string.match(s, "^([^/]+)/(%d+)/(%d+)/(%d)/(%d+)$")
+                local wer, sn, weg, g, at, ab = string.match(s, "^([^/]+)/(%d+)/(%d+)/(%d)/(%d+)/?([^/]*)$")
                 if wer and anzahl < 20 then
                     anzahl = anzahl + 1
                     z.zusagen[B.Kurz(B.D(wer), 40)] = {
                         n = B.Zahl(sn, 10000), weg = math.max(1, math.min(#K.LIEFERWEGE, B.Zahl(weg))),
                         g = g == "1", at = B.Zahl(at, 4000000000),
+                        ab = (ab and ab ~= "") and B.Kurz(B.D(ab), 80) or nil,
                     }
                 end
             end
@@ -3540,6 +3560,15 @@ function B.Einmischen(neu)
         return true, {}
     end
     local meldungen = {}
+    -- ab 1.6.1: vor 1.6.1 empfangene Zeilen mit abgeschnittener Nummer (100000) reparieren
+    if #alt.zeilen == #neu.zeilen then
+        for i, az in ipairs(alt.zeilen) do
+            local nz = neu.zeilen[i]
+            if (az.rezeptID == 100000 or az.itemID == 100000) and B.ZKey(az) ~= B.ZKey(nz) then
+                az.rezeptID, az.itemID = nz.rezeptID, nz.itemID
+            end
+        end
+    end
     if (neu.kopfRev or 0) > (alt.kopfRev or 0) then
         alt.von, alt.an, alt.fuer, alt.notiz, alt.at, alt.plan = neu.von, neu.an, neu.fuer, neu.notiz, neu.at, neu.plan
         alt.mats = neu.mats
@@ -3997,9 +4026,20 @@ function B.Empfangen(text, absender)
                 end)
             end
         end
+        local abgesagt = {}
         for _, m in ipairs(meldungen) do
             if type(m) == "table" and eigene[o.von] and not eigene[m.wer] then
-                if m.zurueck then
+                if m.s.ab then
+                    -- ab 1.6.1: Absage mit Grund (einmal je Person und Bestellung melden)
+                    if not abgesagt[m.wer] then
+                        abgesagt[m.wer] = true
+                        local t = B.Anzeige(m.wer) .. " hat deine Bestellung"
+                            .. ((o.fuer or "") ~= "" and (" für " .. o.fuer) or "") .. " abgesagt: „" .. m.s.ab .. "“."
+                        O.Chat(t)
+                        B.Hinweis("BESTELLUNG ABGESAGT", t, o.an == "" and "Andere aus der Gruppe können sie weiter liefern."
+                            or "Du kannst sie stornieren und neu bestellen.", o)
+                    end
+                elseif m.zurueck then
                     local t = B.Anzeige(m.wer) .. " hat die Zusage für " .. m.name .. " zurückgenommen."
                     O.Chat(t)
                     B.Hinweis("ZUSAGE ZURÜCKGENOMMEN", t, "Deine Bestellung ist dafür wieder offen.", o)
@@ -4124,6 +4164,117 @@ function B.Zusagen(o, schluessel, n, weg, geliefert, still)
     end
 end
 
+-- ab 1.6.1: eine Bestellung an mich absagen (mit Grund). Nur ein Vermerk: der Besteller
+-- bekommt Bescheid, die Bestellung selbst bleibt seine.
+-- Skill-Stufen wie im Berufefenster (Enum.TradeskillRelativeDifficulty): Farbe und Text
+K.STUFEN = {
+    [0] = { "ff8040", "Gibt sicher einen Fertigkeitspunkt." },
+    [1] = { "ffff00", "Gibt meistens einen Fertigkeitspunkt." },
+    [2] = { "40bf40", "Gibt selten einen Fertigkeitspunkt." },
+    [3] = { "808080", "Gibt keinen Fertigkeitspunkt mehr." },
+}
+K.ABSAGE_GRUENDE = { "Ich kann das nicht herstellen", "Mir fehlen die Zutaten", "Ich habe gerade keine Zeit",
+    "Ich habe keine übrig" }
+
+function B.Absagen(o, grund)
+    local ich = B.Ich()
+    grund = B.Kurz(grund ~= "" and grund or "Ohne Grund", 80)
+    for _, z in ipairs(o.zeilen) do
+        z.zusagen = z.zusagen or {}
+        local alt, altName = B.MeineZusage(z)
+        if altName and altName ~= ich then
+            z.zusagen[altName] = nil
+        end
+        z.zusagen[ich] = { n = 0, weg = alt and alt.weg or 1, g = false, ab = grund,
+            at = math.max(time(), (alt and alt.at or 0) + 1) }
+    end
+    local gesendet = B.Verteilen(o)
+    Melden("Bestellung abgesagt." .. (gesendet and "" or " Das wird übertragen, sobald ihr zusammen in einer Gruppe seid."))
+end
+
+-- habe ich die ganze Bestellung abgesagt?
+function B.VonMirAbgesagt(o)
+    for _, z in ipairs(o.zeilen or {}) do
+        local s = B.MeineZusage(z)
+        if not (s and s.ab) then
+            return false
+        end
+    end
+    return #(o.zeilen or {}) > 0
+end
+
+function B.AbsageOeffnen(anker, o)
+    local e = B.absage
+    if not e then
+        e = O.Rahmen("Frame", "GuildERPAbsage", Fenster, K.BACKDROP_VORLAGE)
+        e.deckend = true
+        e:SetSize(330, 150)
+        e:SetFrameStrata("DIALOG")
+        e:EnableMouse(true)
+        B.Pergament(e)
+        e.frage = Schrift(e, "GameFontHighlight")
+        e.frage:SetPoint("TOPLEFT", 14, -12)
+        e.frage:SetPoint("RIGHT", -14, 0)
+        B.Tinte(e.frage)
+        e.wahl = WahlKnopf(e, 302)
+        e.wahl:SetPoint("TOPLEFT", 14, -38)
+        e.eigen = O.Rahmen("EditBox", nil, e, K.BACKDROP_VORLAGE)
+        e.eigen:SetSize(302, 26)
+        e.eigen:SetPoint("TOPLEFT", e.wahl, "BOTTOMLEFT", 0, -8)
+        e.eigen:SetAutoFocus(false)
+        e.eigen:SetFontObject("GameFontHighlight")
+        e.eigen:SetTextInsets(8, 8, 0, 0)
+        e.eigen:SetMaxLetters(80)
+        e.eigen:SetTextColor(K.TINTE[1], K.TINTE[2], K.TINTE[3])
+        Flaeche(e.eigen, { 0.95, 0.91, 0.81, 1 }, { 0.66, 0.58, 0.42, 1 })
+        e.eigen:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        e.eigen:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+        e.ok = B.Knopf(e, "Absagen", 100)
+        e.ok:SetPoint("BOTTOMRIGHT", -12, 12)
+        e.abbrechen = B.Knopf(e, "Abbrechen", 90)
+        e.abbrechen:SetPoint("RIGHT", e.ok, "LEFT", -6, 0)
+        e.abbrechen:SetScript("OnClick", function() e:Hide() end)
+        e:SetScript("OnHide", function() PopupZu() end)
+        B.absage = e
+    end
+    e.grundNr = 1
+    e.eigen:SetText("")
+    e.frage:SetText("Bestellung von " .. B.Anzeige(o.von) .. " absagen? Warum?")
+    local eigenNr = #K.ABSAGE_GRUENDE + 1
+    local function zeigen()
+        e.wahl.text:SetText(K.ABSAGE_GRUENDE[e.grundNr] or "Eigener Grund …")
+        local eigen = e.grundNr == eigenNr
+        e.eigen:SetShown(eigen)
+        e:SetHeight(eigen and 150 or 116)
+        if eigen then
+            e.eigen:SetFocus()
+        else
+            e.eigen:ClearFocus()
+        end
+    end
+    e.wahl:SetScript("OnClick", function(self)
+        local liste = {}
+        for i, g in ipairs(K.ABSAGE_GRUENDE) do
+            table.insert(liste, { wert = i, text = g, gewaehlt = i == e.grundNr })
+        end
+        table.insert(liste, { wert = eigenNr, text = "Eigener Grund …", gewaehlt = e.grundNr == eigenNr })
+        PopupZeigen(self, 302, liste, function(wert)
+            e.grundNr = wert
+            zeigen()
+        end)
+    end)
+    e.ok:SetScript("OnClick", function()
+        local grund = K.ABSAGE_GRUENDE[e.grundNr] or (e.eigen:GetText() or "")
+        B.Absagen(o, grund)
+        e:Hide()
+        FensterAktualisieren()
+    end)
+    zeigen()
+    e:ClearAllPoints()
+    e:SetPoint("TOPRIGHT", anker, "BOTTOMRIGHT", 0, -4)
+    e:Show()
+end
+
 -- Tooltip fuer eine Bestellzeile: der Gegenstand bzw. die Verzauberung, wie im Spiel
 function B.ZeilenTooltip(zeile)
     if not GameTooltip then
@@ -4176,7 +4327,7 @@ function B.OffenFuerMich()
             for _, z in ipairs(o.zeilen) do
                 local _, _, st = B.ZeilenStand(z)
                 local meine = B.MeineZusage(z)
-                local kann = not z.rezeptID or B.KenneRezept(z.rezeptID)
+                local kann = (not z.rezeptID or B.KenneRezept(z.rezeptID)) and not (meine and meine.ab)
                 if kann and st ~= "geliefert" and st ~= "zugesagt" and not (meine and meine.n > 0) then
                     anzahl = anzahl + 1
                     break
@@ -4707,7 +4858,7 @@ function B.AnsichtZeigen(f)
         elseif o.status == "offen" then
             if eigene[o.von] then
                 table.insert(aus, o)
-            elseif o.an == "" or eigene[o.an] then
+            elseif (o.an == "" or eigene[o.an]) and not B.VonMirAbgesagt(o) then
                 table.insert(ein, o)
             end
         elseif o.status == "zurueckgezogen" and not eigene[o.von] and not o.ausgeblendet then
@@ -4764,6 +4915,7 @@ function B.AnsichtZeigen(f)
                 r:SetPoint("RIGHT", s, "RIGHT", -14, 0)
                 local name = B.ZName(z)
                 r.itemID, r.rid = z.itemID, z.rezeptID
+                r.abgesagt = nil
                 local zu, gel, st = B.ZeilenStand(z)
                 r.text:SetText(z.n .. "× " .. name)
                 local eigen = B.MeineZusage(z)
@@ -4831,15 +4983,22 @@ function B.AnsichtZeigen(f)
                         r.chip:SetPoint("TOPRIGHT", r.k1, "TOPLEFT", -8, -2)
                     end
                 else
-                    local teile = {}
+                    local teile, absagen = {}, {}
                     for wer, sz in pairs(z.zusagen or {}) do
                         if (sz.n or 0) > 0 then
                             table.insert(teile, B.Anzeige(wer) .. (sz.g and " hat " .. sz.n .. " geliefert" or " liefert " .. sz.n)
                                 .. " (" .. (K.LIEFERWEGE[sz.weg] or "?") .. ")")
+                        elseif sz.ab then
+                            table.insert(absagen, B.Anzeige(wer) .. " hat abgesagt: „" .. sz.ab .. "“")
                         end
                     end
                     table.sort(teile)
-                    zusatz = #teile > 0 and table.concat(teile, ", ") or "Noch keine Zusage."
+                    table.sort(absagen)
+                    zusatz = #teile > 0 and table.concat(teile, ", ") or (#absagen > 0 and "" or "Noch keine Zusage.")
+                    if #absagen > 0 then
+                        r.abgesagt = st == "offen"
+                        zusatz = (zusatz ~= "" and (zusatz .. ". ") or "") .. Farbe("7a2a18", table.concat(absagen, ". ") .. ".")
+                    end
                     if zu > 0 and zu < z.n then
                         zusatz = zusatz .. ". Noch " .. (z.n - zu) .. " offen."
                     elseif #teile > 0 then
@@ -4849,7 +5008,7 @@ function B.AnsichtZeigen(f)
                         zusatz = zusatz .. (o.mats == "b" and " Du bringst die Zutaten mit." or " Der Hersteller besorgt die Zutaten.")
                     end
                 end
-                r.chip:SetText(storniert and Farbe("7a2a18", "storniert") or B.ChipText(st))
+                r.chip:SetText(storniert and Farbe("7a2a18", "storniert") or (r.abgesagt and Farbe("7a2a18", "abgesagt")) or B.ChipText(st))
                 r.text:SetPoint("RIGHT", r.chip, "LEFT", -6, 0)
                 local ah = z.itemID and z.itemID > 0 and A.Text(z.itemID, false, true)
                 if ah then
@@ -4899,9 +5058,16 @@ function B.AnsichtZeigen(f)
                 s.fuss:SetText(B.Anzeige(o.von) .. " hat storniert.")
                 fh = 30
             elseif i == 1 then
-                s.fuss:SetPoint("RIGHT", s, "RIGHT", -14, 0)
+                -- ab 1.6.1: Bestellung absagen (mit Grund)
+                s.k2:SetText("Absagen")
+                s.k2:SetPoint("TOPRIGHT", -12, -(zy + 6))
+                s.k2:SetScript("OnClick", function(self)
+                    B.AbsageOeffnen(self, o)
+                end)
+                s.k2:Show()
+                s.fuss:SetPoint("RIGHT", s.k2, "LEFT", -8, 0)
                 s.fuss:SetText(o.notiz ~= "" and ("„" .. o.notiz .. "“") or "")
-                fh = o.notiz ~= "" and ((s.fuss:GetStringHeight() or 12) + 8) or 0
+                fh = math.max(30, (s.fuss:GetStringHeight() or 12) + 8)
             else
                 s.k1:SetText("Abschließen")
                 s.k2:SetText("Stornieren")
