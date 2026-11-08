@@ -1,4 +1,4 @@
--- Guild ERP 1.6.1 (Beta)
+-- Guild ERP 1.6.2 (Beta)
 -- Werkstatt: links das Rezeptbuch (Handwerk waehlen, suchen), rechts der Herstellauftrag mit
 -- mehrstufiger Stueckliste und Ampel, ob alles da ist.
 -- Liest ausschliesslich ueber die normale Add-on-Schnittstelle (nur lesend) und speichert
@@ -26,7 +26,7 @@
 local ADDON_TITEL = "|cffd4af37Guild ERP|r"
 local frame = CreateFrame("Frame")
 local K = {} -- Konstanten (spart Platz fuer lokale Namen)
-K.VERSION = "1.6.1"
+K.VERSION = "1.6.2"
 K.ICON_UNBEKANNT = "Interface\\Icons\\INV_Misc_QuestionMark"
 K.ICON_TITEL = "Interface\\Icons\\Trade_BlackSmithing"
 K.ICON_REZEPT = "Interface\\Icons\\INV_Scroll_03"
@@ -2685,6 +2685,30 @@ local function QuelleZeile(q)
     return table.concat(teile, ", ")
 end
 
+-- ab 1.6.2: wie viele Stueck kann der gespielte Charakter herstellen? Rueckgabe: aus der Tasche, mit Bank
+function Kat.Herstellbar(rid, pool)
+    local r = GuildERPData.recipes[rid]
+    if not (r and r.reagents and #r.reagents > 0) then
+        return nil
+    end
+    local tasche, bank
+    for _, z in ipairs(r.reagents) do
+        local t, b = 0, 0
+        for _, q in ipairs(pool[z.itemID] or {}) do
+            if q.rang == 1 then
+                t = t + q.n
+            elseif q.rang == 2 then
+                b = b + q.n
+            end
+        end
+        local je = math.max(1, z.count or 1)
+        tasche = math.min(tasche or math.huge, math.floor(t / je))
+        bank = math.min(bank or math.huge, math.floor((t + b) / je))
+    end
+    local stueck = r.numMade or 1
+    return tasche * stueck, bank * stueck
+end
+
 local function RezeptbuchZeigen(f, fraktion, rezepte, berufe)
     local d = Daten()
     local L = f.links
@@ -2804,6 +2828,7 @@ local function RezeptbuchZeigen(f, fraktion, rezepte, berufe)
         z.name:SetText(daten.text)
         z.hinweis:SetText(daten.hinweis or "")
         z.hinweis:SetShown(daten.hinweis ~= nil)
+        z.rechts:SetJustifyH("RIGHT")
         z.rechts:SetText(daten.rechts or "")
         O.Gewaehlt(z, daten.gewaehlt and true or false)
         z.itemID, z.titel, z.tip = daten.itemID, daten.titel, daten.tip
@@ -2870,6 +2895,7 @@ local function RezeptbuchZeigen(f, fraktion, rezepte, berufe)
             end
         end
     end
+    local vorrat -- ab 1.6.2: Bestand fuer "herstellbar" (einmal je Anzeige)
     local gelerntOffen = not IstZu("gruppe:gelernt")
     if #berufe[beruf] > 0 then
         kopf("Gelernt", tostring(#gelernt), gelerntOffen, true, function() Umklappen("gruppe:gelernt") end)
@@ -2894,16 +2920,26 @@ local function RezeptbuchZeigen(f, fraktion, rezepte, berufe)
                     .. Farbe("808080", "Stand: zuletzt geöffnetes Berufefenster von "
                         .. ((e.stufen[ich] and ich) or wer[1]) .. ".")
             end
+            local rechts = (function()
+                -- ab 1.6.2: oben herstellbare Stueck (Tasche, in Klammern mit Bank), darunter Gewinn je Stueck
+                local g = A.Gewinn(e.id, 1)
+                local gewinn = g and #g.ohne == 0 and A.GewinnText(math.floor(g.gewinn / math.max(1, g.stueck) + 0.5))
+                vorrat = vorrat or BestandSammeln(fraktion)
+                local t, b = Kat.Herstellbar(e.id, vorrat)
+                local zahl
+                if t then
+                    zahl = (t == 0 and b == 0) and Farbe("5d584c", "0 (0)")
+                        or (Farbe(t > 0 and "ffffff" or "a59c86", t) .. Farbe("a59c86", " (" .. b .. ")"))
+                    tip = (tip and (tip .. "\n") or "") .. "Herstellbar: " .. t .. " aus der Tasche, " .. b .. " mit Bank"
+                end
+                if zahl and gewinn then
+                    return zahl .. "\n" .. gewinn
+                end
+                return zahl or gewinn or (wer[1] .. (#wer > 1 and (" +" .. (#wer - 1)) or ""))
+            end)()
             zeile({
-                wert = e.id, text = Farbe(hex, e.r.name or "?"), tip = tip,
+                wert = e.id, text = Farbe(hex, e.r.name or "?"), tip = tip, rechts = rechts,
                 icon = ItemIcon(e.r.itemID) or e.r.icon, itemID = e.r.itemID,
-                rechts = (function()
-                    local g = A.Gewinn(e.id, 1)
-                    if g and #g.ohne == 0 then
-                        return A.GewinnText(math.floor(g.gewinn / math.max(1, g.stueck) + 0.5))
-                    end
-                    return wer[1] .. (#wer > 1 and (" +" .. (#wer - 1)) or "")
-                end)(),
                 gewaehlt = wunsch == e.id, einzug = 22,
             })
         end)
@@ -5224,8 +5260,8 @@ function P.Zusagen(rezeptID)
 end
 
 -- Zusage auf eine Rezept-Bestellung als Planauftrag uebernehmen (oder Menge anpassen)
-function P.Uebernehmen(o, z, n)
-    local rid = z.rezeptID
+function P.Uebernehmen(o, z, n, rezeptID)
+    local rid = rezeptID or z.rezeptID
     if not rid or not GuildERPData.recipes[rid] then
         return
     end
@@ -5244,6 +5280,67 @@ function P.Uebernehmen(o, z, n)
     end
     plan.menge = math.max(1, (plan.menge or 0) + n - alt)
     Melden("Als Planauftrag übernommen: " .. plan.menge .. "× " .. B.ZName(z) .. ". Du findest ihn unter „Planaufträge“.")
+end
+
+-- ab 1.6.2: Zeile einer Bestellung, die zu einem Rezept passt (Rezept selbst oder sein Ergebnis)
+function P.PassendeZeile(o, rid)
+    local r = GuildERPData.recipes[rid]
+    for _, z in ipairs(o.zeilen or {}) do
+        if z.rezeptID == rid or (not z.rezeptID and r and r.itemID and r.itemID > 0 and z.itemID == r.itemID) then
+            return z
+        end
+    end
+end
+
+-- Bestellungen, fuer die dieser Planauftrag gedacht ist: { {o, z, fe} }
+function P.Verknuepft(plan)
+    local liste = {}
+    for oid, fe in pairs(plan.fuer or {}) do
+        local o = B.Liste()[oid]
+        local z = o and o.status == "offen" and P.PassendeZeile(o, plan.rezeptID)
+        if z then
+            table.insert(liste, { o = o, z = z, fe = fe })
+        end
+    end
+    table.sort(liste, function(x, y) return (x.o.at or 0) < (y.o.at or 0) end)
+    return liste
+end
+
+-- offene Bestellungen an mich mit diesem Rezept, die noch nicht verknuepft sind
+function P.Verknuepfbar(plan)
+    local liste = {}
+    local eigene = B.EigeneNamen()
+    for oid, o in pairs(B.Liste()) do
+        if o.status == "offen" and not eigene[o.von] and (o.an == "" or eigene[o.an])
+            and not (plan.fuer or {})[oid] and not B.VonMirAbgesagt(o) and not P.AndereFraktion(o.von) then
+            local z = P.PassendeZeile(o, plan.rezeptID)
+            local st
+            if z then
+                st = select(3, B.ZeilenStand(z))
+            end
+            if z and st ~= "geliefert" then
+                table.insert(liste, { o = o, z = z })
+            end
+        end
+    end
+    table.sort(liste, function(x, y) return (x.o.at or 0) > (y.o.at or 0) end)
+    return liste
+end
+
+-- Bestellung mit dem Planauftrag verknuepfen: dort zusagen, Menge im Planauftrag erhoehen
+function P.Verknuepfen(plan, o, z)
+    local eigen, eigenName = B.MeineZusage(z)
+    local andere = 0
+    for wer, s in pairs(z.zusagen or {}) do
+        if wer ~= eigenName then
+            andere = andere + (s.n or 0)
+        end
+    end
+    local n = (eigen and (eigen.n or 0) > 0) and eigen.n or math.max(1, z.n - andere)
+    if not (eigen and (eigen.n or 0) > 0) then
+        B.Zusagen(o, B.ZKey(z), n, eigen and eigen.weg or 1, false, true)
+    end
+    P.Uebernehmen(o, z, n, plan.rezeptID)
 end
 
 -- blaue Zeilen unter einer Zutat: "+2 zugesagt: Zwerg Pudel, direkt handeln"
@@ -5383,9 +5480,40 @@ function P.KarteBauen(eltern)
     k.aktionen.linie:SetPoint("TOPLEFT", 1, 0)
     k.aktionen.linie:SetPoint("TOPRIGHT", -1, 0)
     k.aktionen.linie:SetColorTexture(1, 1, 1, 0.07)
+    -- ab 1.6.2: Herstellen direkt aus dem Planauftrag (wie der Knopf in der Werkstatt)
+    k.machen = O.Rahmen("Button", nil, k.aktionen, "UIPanelButtonTemplate")
+    k.machen:SetHeight(24)
+    k.machen:SetPoint("LEFT", 80, -1)
+    k.machen:SetMotionScriptsWhileDisabled(true)
+    k.machen:SetScript("OnEnter", function(self)
+        if GameTooltip and self.tip then
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:AddLine(self.tip[1])
+            GameTooltip:AddLine(self.tip[2], 1, 0.82, 0, true)
+            GameTooltip:Show()
+        end
+    end)
+    k.machen:SetScript("OnLeave", function()
+        if GameTooltip then
+            GameTooltip:Hide()
+        end
+    end)
     k.werkstatt = O.Rahmen("Button", nil, k.aktionen, "UIPanelButtonTemplate")
     k.werkstatt:SetHeight(24)
-    k.werkstatt:SetPoint("LEFT", 80, -1)
+    k.werkstatt:SetPoint("LEFT", k.machen, "RIGHT", 8, 0)
+    -- ab 1.6.2: Bereich "Für Bestellungen" (verknuepfte Bestellungen, Geliefert, Verknuepfen)
+    k.fuerBox = O.Rahmen("Frame", nil, k)
+    k.fuerBox.linie = k.fuerBox:CreateTexture(nil, "ARTWORK")
+    k.fuerBox.linie:SetHeight(1)
+    k.fuerBox.linie:SetPoint("TOPLEFT", 1, 0)
+    k.fuerBox.linie:SetPoint("TOPRIGHT", -1, 0)
+    k.fuerBox.linie:SetColorTexture(1, 1, 1, 0.07)
+    k.fuerBox.titel = Schrift(k.fuerBox, "GameFontNormalSmall")
+    k.fuerBox.titel:SetPoint("TOPLEFT", 80, -8)
+    k.fuerBox.titel:SetText("FÜR BESTELLUNGEN")
+    k.fuerBox.zeilen = {}
+    k.fuerBox.wahl = WahlKnopf(k.fuerBox, 300)
+    k.fuerBox.wahl.text:SetText("Mit Bestellung verknüpfen …")
     k.netz = O.Rahmen("Button", nil, k.aktionen, "UIPanelButtonTemplate")
     k.netz:SetHeight(24)
     k.netz:SetPoint("LEFT", k.werkstatt, "RIGHT", 8, 0)
@@ -5553,6 +5681,129 @@ function P.InfoText(zeile, fraktion)
         table.insert(zeilen, Farbe(K.STATUS_HEX.rot, "Fehlt") .. (#h > 0 and (". Händler: " .. HaendlerText(h[1])) or ""))
     end
     return table.concat(zeilen, "\n")
+end
+
+-- ab 1.6.2: Knopf "Herstellen" auf der Planauftrag-Karte (nur eigener Charakter, alles in der Tasche)
+function P.MachenSetzen(k, plan, r, allesTasche)
+    local m = k.machen
+    local laeufe = r and math.ceil((plan.menge or 1) / math.max(1, r.numMade or 1)) or 1
+    local selbst = r and P.VomSpieler(plan)
+    m:SetText("Herstellen (" .. laeufe .. "×)")
+    m:SetWidth((m:GetFontString() and m:GetFontString():GetStringWidth() or 110) + 28)
+    m:SetEnabled((allesTasche and selbst) and true or false)
+    m:SetScript("OnClick", function()
+        P.Herstellen(plan.rezeptID, laeufe)
+    end)
+    if not r then
+        m.tip = { "Herstellen", "Dieses Rezept kennt gerade keiner deiner Charaktere." }
+    elseif not selbst then
+        m.tip = { "Herstellen", "Das kann nur " .. (plan.wer or "?") .. ". Mit diesem Charakter einloggen." }
+    elseif allesTasche then
+        m.tip = { "Herstellen (" .. laeufe .. "×)", "Stellt sofort her, wie der Knopf im Berufefenster. "
+            .. "Ist das Berufefenster zu, öffnet der erste Klick es – dann noch einmal klicken." }
+    else
+        m.tip = { "Herstellen", "Geht, sobald alle Zutaten in deiner Tasche sind." }
+    end
+end
+
+-- ab 1.6.2: Bereich "Für Bestellungen" unter den Knoepfen. Rueckgabe: Hoehe
+function P.FuerZeigen(k, plan, y)
+    local box = k.fuerBox
+    local verknuepft = P.VomSpieler(plan) and P.Verknuepft(plan) or {}
+    local frei = P.VomSpieler(plan) and P.Verknuepfbar(plan) or {}
+    for _, z in ipairs(box.zeilen) do
+        z:Hide()
+    end
+    if #verknuepft == 0 and #frei == 0 then
+        box:Hide()
+        return 0
+    end
+    box:ClearAllPoints()
+    box:SetPoint("TOPLEFT", 0, -y)
+    box:SetPoint("TOPRIGHT", 0, -y)
+    local zy = 26
+    local alles = #verknuepft > 0
+    for i, e in ipairs(verknuepft) do
+        local z = box.zeilen[i]
+        if not z then
+            z = O.Rahmen("Frame", nil, box)
+            z:SetHeight(36)
+            z.text = Schrift(z, "GameFontHighlight")
+            z.text:SetPoint("TOPLEFT", 0, -2)
+            z.unter = Schrift(z, "GameFontHighlightSmall")
+            z.unter:SetPoint("TOPLEFT", z.text, "BOTTOMLEFT", 0, -2)
+            z.unter:SetTextColor(K.GEDAEMPFT[1], K.GEDAEMPFT[2], K.GEDAEMPFT[3])
+            z.knopf = O.Rahmen("Button", nil, z, "UIPanelButtonTemplate")
+            z.knopf:SetSize(90, 22)
+            z.knopf:SetPoint("RIGHT", 0, 0)
+            z.knopf:SetText("Geliefert")
+            z.text:SetPoint("RIGHT", z.knopf, "LEFT", -8, 0)
+            z.unter:SetPoint("RIGHT", z.knopf, "LEFT", -8, 0)
+            box.zeilen[i] = z
+        end
+        z:ClearAllPoints()
+        z:SetPoint("TOPLEFT", 80, -zy)
+        z:SetPoint("RIGHT", box, "RIGHT", -14, 0)
+        local o, oz = e.o, e.z
+        local eigen = B.MeineZusage(oz)
+        z.text:SetText((o.an == "" and (B.Anzeige(o.von) .. " (an die Gruppe)") or B.Anzeige(o.von)) .. " · " .. oz.n .. "×")
+        local stand
+        if eigen and eigen.g then
+            stand = Farbe(K.STATUS_HEX.tasche, "Du hast " .. eigen.n .. " geliefert.")
+        elseif eigen and (eigen.n or 0) > 0 then
+            stand = "Du lieferst " .. eigen.n .. " (" .. P.Weg(eigen.weg) .. "). Noch nicht geliefert."
+            alles = false
+        else
+            stand = "Noch keine Zusage von dir."
+            alles = false
+        end
+        z.unter:SetText("Bestellt " .. P.Zeit(o.at) .. ". " .. stand)
+        z.knopf:SetShown(eigen and (eigen.n or 0) > 0 and not eigen.g and true or false)
+        z.knopf:SetScript("OnClick", function()
+            B.Zusagen(o, B.ZKey(oz), eigen.n, eigen.weg, true)
+            FensterAktualisieren()
+        end)
+        z:Show()
+        zy = zy + 40
+    end
+    -- alles geliefert: Planauftrag abschliessen
+    box.fertig = box.fertig or O.Rahmen("Button", nil, box, "UIPanelButtonTemplate")
+    box.fertig:SetText("Planauftrag erledigt")
+    box.fertig:SetSize((box.fertig:GetFontString() and box.fertig:GetFontString():GetStringWidth() or 120) + 28, 22)
+    box.fertig:SetShown(alles)
+    if alles then
+        box.fertig:ClearAllPoints()
+        box.fertig:SetPoint("TOPLEFT", 80, -zy)
+        box.fertig:SetScript("OnClick", function()
+            P.Liste()[plan.rezeptID] = nil
+            Melden("Planauftrag erledigt.")
+            FensterAktualisieren()
+        end)
+        zy = zy + 30
+    end
+    box.wahl:SetShown(#frei > 0)
+    if #frei > 0 then
+        box.wahl:ClearAllPoints()
+        box.wahl:SetPoint("TOPLEFT", 80, -zy)
+        box.wahl:SetScript("OnClick", function(self)
+            local liste = { { kopf = "Offene Bestellungen bei dir" } }
+            for i, e in ipairs(frei) do
+                table.insert(liste, { wert = i, text = (e.o.an == "" and "Gruppe: " or "")
+                    .. B.Anzeige(e.o.von) .. " · " .. e.z.n .. "× " .. B.ZName(e.z), rechts = P.Zeit(e.o.at) })
+            end
+            PopupZeigen(self, 330, liste, function(wert)
+                local e = frei[wert]
+                if e then
+                    P.Verknuepfen(plan, e.o, e.z)
+                    FensterAktualisieren()
+                end
+            end)
+        end)
+        zy = zy + 34
+    end
+    box:SetHeight(zy + 4)
+    box:Show()
+    return zy + 4
 end
 
 function P.AnsichtZeigen(f)
@@ -5778,8 +6029,11 @@ function P.AnsichtZeigen(f)
         k.aktionen:ClearAllPoints()
         k.aktionen:SetPoint("TOPLEFT", 0, -(bannerH + kopfH))
         k.aktionen:SetPoint("TOPRIGHT", 0, -(bannerH + kopfH))
+        -- ab 1.6.2: Herstellen und verknuepfte Bestellungen
+        P.MachenSetzen(k, plan, r, #liste > 0 and zahl.tasche == #liste)
         -- aufgeklappt: jede Zutat mit Ort und Zusagen
         local zy = bannerH + kopfH + 38
+        zy = zy + P.FuerZeigen(k, plan, zy)
         local i = 0
         local function zeigen(zeile, tiefe, pfad)
             i = i + 1

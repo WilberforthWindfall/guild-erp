@@ -32,6 +32,6 @@ Dauerhafte Hinweise für Claude Code in diesem Repository. Ausführliche Überga
 
 ## Version und Auslieferung
 - Version an **vier** Stellen erhöhen: Kopfkommentar Zeile 1 und `K.VERSION` in `GuildERP.lua`, `## Version` in `GuildERP.toc`, Abschnitt „Neu in …“ in `GuildERP/LIESMICH.txt`.
-- Spiel-Ordner des Nutzers (Beta): `C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns\GuildERP\` – für die Live-Version den richtigen Ordner beim Nutzer erfragen.
+- Spiel-Ordner des Nutzers (Live, WoW Forever): `C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\GuildERP\` – dorthin ausliefern. Der alte Beta-Ordner `_classic_beta_` wird nicht mehr gespielt.
 - `## Interface:` in der `.toc` muss zur Live-Version passen (im Spiel: `/dump select(4, GetBuildInfo())`).
 - Weitergabe als ZIP mit genau einem Ordner `GuildERP/` darin.

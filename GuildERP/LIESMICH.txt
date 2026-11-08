@@ -1,4 +1,4 @@
-Guild ERP 1.6.1 (Beta)
+Guild ERP 1.6.2 (Beta)
 ====================
 
 Was macht das Add-on?
@@ -223,3 +223,8 @@ Neu in 1.6.1:
 - Bestellungen absagen: Unter jeder Bestellung bei dir gibt es den Knopf "Absagen". Den Grund wählst du aus einer Liste oder tippst einen eigenen ein. Der Besteller bekommt einen Hinweis mit deinem Grund und sieht "abgesagt" an der Bestellung. Bei dir verschwindet sie aus der Liste. War sie an die ganze Gruppe gerichtet, können andere sie weiter liefern.
 - Skill-Farben im Rezeptbuch, wie im Berufefenster: orange = gibt sicher einen Fertigkeitspunkt, gelb = meistens, grün = selten, grau = keinen mehr. Die Farben stammen aus dem zuletzt geöffneten Berufefenster des Charakters.
 - Behoben: Rezepte und Gegenstände mit einer Nummer über 100.000 kamen beim Empfänger als "Rezept 100000" an. Dadurch ließ sich die Lieferung nicht vermerken. Alte, schon empfangene Bestellungen werden beim nächsten Abgleich repariert.
+
+Neu in 1.6.2:
+- Planauftrag umsetzen: Auf der Karte gibt es jetzt den Knopf "Herstellen". Er wirkt wie der Knopf in der Werkstatt: ein Klick ist eine Herstellung der vorgemerkten Menge. Das geht nur mit dem Charakter, der herstellt, und nur, wenn alles in der Tasche ist.
+- Planauftrag und Bestellung verknüpfen: Unter "Für Bestellungen" stehen die Bestellungen, für die der Planauftrag gedacht ist, jeweils mit dem Knopf "Geliefert". Über "Mit Bestellung verknüpfen" hängst du eine offene Bestellung an dich nachträglich an. Guild ERP sagt dort zu und erhöht die Menge. Ist alles geliefert, schließt "Planauftrag erledigt" ihn ab.
+- Rezeptbuch: Rechts steht, wie viele Stück du herstellen kannst, zum Beispiel "3 (5)": 3 aus der Tasche, 5 zusammen mit der Bank. Darunter steht klein der Gewinn je Stück, sobald alle Preise bekannt sind.

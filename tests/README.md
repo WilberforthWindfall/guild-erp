@@ -28,3 +28,4 @@
 | sim26 | Werkstatt zeigt nur den gerade gespielten Charakter |
 | sim27 | Auktionshaus-Komplettabfrage |
 | sim28 | Bestellung absagen mit Grund, Nummern über 100000 |
+| sim29 | Planauftrag: Herstellen, mit Bestellung verknüpfen, Geliefert; Rezeptbuch herstellbar |
